@@ -53,6 +53,7 @@
 #include "d_dehacked.h"
 #include "d_event.h"
 #include "d_main.h"
+#include "g_splitscreen.h"
 #include "d_net.h"
 #include "d_netinf.h"
 #include "decallib.h"
@@ -1363,43 +1364,87 @@ void D_Display ()
 		twod->Begin(screen->GetWidth(), screen->GetHeight());
 		if (!hud_toggled)
 		{
-			V_DrawBlend(viewsec);
-			if (automapactive)
-			{
-				primaryLevel->automap->Drawer ((hud_althud && viewheight == SCREENHEIGHT) ? viewheight : StatusBar->GetTopOfStatusbar());
-			}
+			// Decided once from the full-screen view, before splitscreen views change viewheight.
+			const int hudmode = (hud_althud && viewheight == SCREENHEIGHT && screenblocks > 10) ? 0
+				: (viewheight == SCREENHEIGHT && viewactive && screenblocks > 10) ? 1 : 2;
 
-			// for timing the statusbar code.
-			//cycle_t stb;
-			//stb.Reset();
-			//stb.Clock();
-			if (!automapactive || viewactive)
+			auto drawHud = [&](sector_t* sec, bool split)
 			{
-				StatusBar->RefreshViewBorder ();
-			}
-			if (hud_althud && viewheight == SCREENHEIGHT && screenblocks > 10)
-			{
-				StatusBar->DrawBottomStuff (HUD_AltHud);
-				if (DrawFSHUD || automapactive) StatusBar->DrawAltHUD();
-				if (players[consoleplayer].camera && players[consoleplayer].camera->player && !automapactive)
+				V_DrawBlend(sec);
+				if (automapactive)
 				{
-					StatusBar->DrawCrosshair(vp.TicFrac);
+					primaryLevel->automap->Drawer ((hud_althud && viewheight == SCREENHEIGHT) ? viewheight : StatusBar->GetTopOfStatusbar());
 				}
-				StatusBar->CallDraw (HUD_AltHud, vp.TicFrac);
-				StatusBar->DrawTopStuff (HUD_AltHud);
-			}
-			else if (viewheight == SCREENHEIGHT && viewactive && screenblocks > 10)
+
+				// for timing the statusbar code.
+				//cycle_t stb;
+				//stb.Reset();
+				//stb.Clock();
+				if (!split && (!automapactive || viewactive))
+				{
+					StatusBar->RefreshViewBorder ();
+				}
+				if (hudmode == 0)
+				{
+					StatusBar->DrawBottomStuff (HUD_AltHud);
+					if (DrawFSHUD || automapactive) StatusBar->DrawAltHUD();
+					if (players[consoleplayer].camera && players[consoleplayer].camera->player && !automapactive)
+					{
+						StatusBar->DrawCrosshair(vp.TicFrac);
+					}
+					StatusBar->CallDraw (HUD_AltHud, vp.TicFrac);
+					StatusBar->DrawTopStuff (HUD_AltHud);
+				}
+				else if (hudmode == 1)
+				{
+					EHudState state = DrawFSHUD ? HUD_Fullscreen : HUD_None;
+					StatusBar->DrawBottomStuff (state);
+					StatusBar->CallDraw (state, vp.TicFrac);
+					StatusBar->DrawTopStuff (state);
+				}
+				else
+				{
+					StatusBar->DrawBottomStuff (HUD_StatusBar);
+					StatusBar->CallDraw (HUD_StatusBar, vp.TicFrac);
+					StatusBar->DrawTopStuff (HUD_StatusBar);
+				}
+			};
+
+			if (gSplitFrame.count > 1 && !automapactive)
 			{
-				EHudState state = DrawFSHUD ? HUD_Fullscreen : HUD_None;
-				StatusBar->DrawBottomStuff (state);
-				StatusBar->CallDraw (state, vp.TicFrac);
-				StatusBar->DrawTopStuff (state);
+				// Splitscreen: draw each local player's HUD into their own view, as that player.
+				struct FSplitHudRestore
+				{
+					int cp = consoleplayer;
+					player_t* cplayer = StatusBar->CPlayer;
+					int vx = viewwindowx, vy = viewwindowy, vw = viewwidth, vh = viewheight;
+					~FSplitHudRestore()
+					{
+						consoleplayer = cp;
+						StatusBar->CPlayer = cplayer;
+						viewwindowx = vx; viewwindowy = vy; viewwidth = vw; viewheight = vh;
+						twod->SetSize(screen->GetWidth(), screen->GetHeight());
+						twod->SetOffset({ 0, 0 });
+						StatusBar->SetScale();
+					}
+				} restore;
+
+				for (int v = 0; v < gSplitFrame.count; v++)
+				{
+					consoleplayer = gSplitFrame.player[v];
+					StatusBar->CPlayer = &players[consoleplayer];
+					viewwindowx = viewwindowy = 0;
+					viewwidth = gSplitFrame.w[v];
+					viewheight = gSplitFrame.h[v];
+					twod->SetSize(gSplitFrame.w[v], gSplitFrame.h[v]);
+					twod->SetOffset({ (double)gSplitFrame.x[v], (double)gSplitFrame.y[v] });
+					StatusBar->SetScale();
+					drawHud(gSplitFrame.sector[v], true);
+				}
 			}
 			else
 			{
-				StatusBar->DrawBottomStuff (HUD_StatusBar);
-				StatusBar->CallDraw (HUD_StatusBar, vp.TicFrac);
-				StatusBar->DrawTopStuff (HUD_StatusBar);
+				drawHud(viewsec, false);
 			}
 			//stb.Unclock();
 			//Printf("Stbar = %f\n", stb.TimeMS());

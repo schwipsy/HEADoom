@@ -16,6 +16,7 @@
 */
 
 #include "gi.h"
+#include "g_splitscreen.h"
 #include "a_dynlight.h"
 #include "m_png.h"
 #include "doomstat.h"
@@ -375,8 +376,9 @@ static sector_t* RenderSplitViews(const int* locals, int count)
 	const int saved_w = viewwidth, saved_h = viewheight, saved_x = viewwindowx, saved_y = viewwindowy;
 	const float saved_ratio = r_viewwindow.WidescreenRatio;
 	sector_t* result = nullptr;
+	gSplitFrame.count = 0;
 
-	for (int v = 0; v < count; v++)
+	for (int v = 0; v < count && v < SPLITSCREEN_MAXVIEWS; v++)
 	{
 		player_t* p = &players[locals[v]];
 		if (p->camera == nullptr)
@@ -400,6 +402,11 @@ static sector_t* RenderSplitViews(const int* locals, int count)
 		if (v != 0) vp.TicFrac = r_viewpoint.TicFrac;
 		sector_t* sec = RenderViewpoint(vp, p->camera, NULL, r_viewpoint.FieldOfView.Degrees(), ratio, fovratio, true, true);
 		if (v == 0) result = sec;
+
+		const int n = gSplitFrame.count++;
+		gSplitFrame.player[n] = locals[v];
+		gSplitFrame.sector[n] = sec;
+		gSplitFrame.x[n] = x; gSplitFrame.y[n] = y; gSplitFrame.w[n] = w; gSplitFrame.h[n] = h;
 	}
 
 	gSplitView.active = false;
@@ -508,6 +515,7 @@ sector_t* RenderView(player_t* player)
 		}
 		else
 		{
+			gSplitFrame.count = 0;
 			retsec = RenderViewpoint(r_viewpoint, player->camera, NULL, r_viewpoint.FieldOfView.Degrees(), ratio, fovratio, true, true);
 		}
 	}

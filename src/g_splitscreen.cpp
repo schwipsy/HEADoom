@@ -19,6 +19,7 @@
 #include "g_levellocals.h"
 #include "b_bot.h"
 #include "i_splitpad.h"
+#include "g_splitscreen.h"
 #include "printf.h"
 #include "d_protocol.h"
 #include "d_event.h"
@@ -28,6 +29,7 @@
 #include "p_checkposition.h"
 
 uint32_t I_SplitscreenReservedPads = 0;
+FSplitFrame gSplitFrame;
 
 #ifndef _WIN32
 bool I_GetSplitPadState(int pad, FSplitPadState& out)
