@@ -760,16 +760,6 @@ endif()
 
 set (FASTMATH_SOURCES ${FASTMATH_SOURCES})
 
-if (DEFINED USE_UPDATER AND USE_UPDATER)
-	set (UPDATER_SOURCES
-		widgets/updatebuttonbar.cpp
-	)
-
-	add_compile_definitions("HAS_UPDATER")
-else()
-	set (UPDATER_SOURCES "")
-endif()
-
 if (DEFINED CURL_REQUIRED AND CURL_REQUIRED AND DEFINED LOAD_CURL_AT_RUNTIME AND LOAD_CURL_AT_RUNTIME)
 	set (CURL_SOURCES
 		curl_loader.cpp
@@ -979,7 +969,6 @@ set (PCH_SOURCES
 	widgets/settingspage.cpp
 	widgets/themedata.cpp
 	widgets/widgetresourcedata.cpp
-	${UPDATER_SOURCES}
 	${CURL_SOURCES}
 
 	common/audio/sound/i_sound.cpp

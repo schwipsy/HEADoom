@@ -264,7 +264,7 @@ jobs:
         config: &common_config
           - name: Windows
             os: windows-latest
-            build_opts: &msvc_opts -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl -DUSE_UPDATER=ON
+            build_opts: &msvc_opts -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl
             build_opts_extra: ""
             deps_cmdline: &msvc_deps >-
               winget install --accept-source-agreements --verbose --exact --id=Ccache.Ccache

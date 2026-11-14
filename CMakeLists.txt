@@ -30,27 +30,6 @@ if(NOT FORCE_NO_LTO)
 	endif()
 endif()
 
-if(WIN32)
-	option( USE_UPDATER "enable auto-updater" OFF )
-endif()
-
-if(USE_UPDATER)
-	set( CURL_REQUIRED TRUE )
-
-	if (WIN32)
-		option( LOAD_CURL_AT_RUNTIME "load curl at runtime instead of linking" ON )
-
-		if (NOT MSVC)
-			# NOTE: not a big issue for now but will need to be fixed if we switch over to mingw as the
-			#       primary windows compiler (which we'll probably have to do eventually for C++26 support)
-			message( FATAL_ERROR "updater.exe currently only builds with msvc" )
-		endif()
-		add_executable( updater WIN32 src/win32/updater.c )
-	else()
-		message( FATAL_ERROR "Updater not available on this platform" )
-	endif()
-endif()
-
 find_package(Threads REQUIRED)
 find_package(Python3 3.6 REQUIRED)
 

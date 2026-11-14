@@ -89,15 +89,13 @@
 #define VR3D_ENABLED
 
 // More stuff that needs to be different for derivatives.
-#define GAMENAME "UZDoom"
-#define WGAMENAME L"UZDoom"
-#define GAMENAMELOWERCASE "uzdoom"
+#define GAMENAME "Headcutter"
+#define WGAMENAME L"Headcutter"
+#define GAMENAMELOWERCASE "headcutter"
 #define APPID "org.zdoom.UZDoom"
-#define QUERYIWADDEFAULT true
+#define QUERYIWADDEFAULT false
 #define BUGS_URL "https://github.com/UZDoom/UZDoom/issues"
 
-#define UPDATER_URL "https://zdoom.org/uzdoom-updates.php?r={}&f={}"
-#define UPDATER_URL_BACKUP "https://github.com/UZDoom/UZDoom/releases/{}/{}/{}"
 
 // For QUERYIWADDEFAULT: Set to 'true' to always show dialog box on startup by default, 'false' to disable.
 // Should set to 'false' for standalone games, and set to 'true' for regular source port forks that are meant to run any game.
