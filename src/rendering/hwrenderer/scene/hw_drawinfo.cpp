@@ -917,7 +917,7 @@ void HWDrawInfo::EndDrawScene(sector_t * viewsector, FRenderState &state)
 	}*/
 
 	// [BB] HUD models need to be rendered here.
-	const bool renderHUDModel = IsHUDModelForPlayerAvailable(players[consoleplayer].camera->player);
+	const bool renderHUDModel = IsHUDModelForPlayerAvailable(Viewpoint.camera->player);
 	if (renderHUDModel)
 	{
 		// [BB] The HUD model should be drawn over everything else already drawn.
@@ -939,7 +939,7 @@ void HWDrawInfo::EndDrawScene(sector_t * viewsector, FRenderState &state)
 
 void HWDrawInfo::DrawEndScene2D(sector_t * viewsector, FRenderState &state)
 {
-	const bool renderHUDModel = IsHUDModelForPlayerAvailable(players[consoleplayer].camera->player);
+	const bool renderHUDModel = IsHUDModelForPlayerAvailable(Viewpoint.camera->player);
 	auto vrmode = VRMode::GetVRMode(true);
 
 	HWViewpointUniforms vp = VPUniforms;
@@ -972,7 +972,8 @@ void HWDrawInfo::Set3DViewport(FRenderState &state)
 	// This is faster on newer hardware because it allows the GPU to skip
 	// reading from slower memory where the full buffers are stored.
 	state.SetScissor(0, 0, -1, -1);
-	state.Clear(CT_Color | CT_Depth | CT_Stencil);
+	// Splitscreen: later views must keep the color of the views already drawn.
+	state.Clear(gSplitView.active && gSplitView.index > 0 ? (CT_Depth | CT_Stencil) : (CT_Color | CT_Depth | CT_Stencil));
 
 	const auto &bounds = screen->mSceneViewport;
 	state.SetViewport(bounds.left, bounds.top, bounds.width, bounds.height);

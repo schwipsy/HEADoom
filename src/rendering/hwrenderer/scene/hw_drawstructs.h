@@ -467,6 +467,7 @@ struct FDynLightData;
 struct FDynamicLight;
 bool GetLight(FDynLightData& dld, int group, Plane& p, FDynamicLight* light, bool checkside);
 void AddLightToList(FDynLightData &dld, int group, FDynamicLight* light, bool forceAttenuate);
+extern DVector3 hw_LightCullViewPos;
 float hw_LightDistanceFade(FDynamicLight* light, const DVector3& viewpos);
 bool hw_LightShadowCulled(FDynamicLight* light, const DVector3& viewpos);
 void SetSplitPlanes(FRenderState& state, const secplane_t& top, const secplane_t& bottom);

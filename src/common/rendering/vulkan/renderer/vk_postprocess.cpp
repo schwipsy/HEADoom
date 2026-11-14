@@ -119,8 +119,8 @@ void VkPostprocess::BlitSceneToPostprocess()
 	// 3D-only resolution scale: the scene was drawn into the lower-left part of the buffers.
 	// Stretch that part over the whole image while copying it into post-processing.
 	const bool scaled = fb->mSceneScaled;
-	const float scale = scaled ? fb->mSceneViewport.width / (float)fb->mFullSceneViewport.width : 1.f;
-	const float scaleY = scaled ? fb->mSceneViewport.height / (float)fb->mFullSceneViewport.height : 1.f;
+	const float scale = scaled ? fb->mSceneScaleX : 1.f;
+	const float scaleY = scaled ? fb->mSceneScaleY : 1.f;
 	fb->RestoreSceneScale();
 	const VkFilter scaleFilter = ViewportLinearScale() ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
 

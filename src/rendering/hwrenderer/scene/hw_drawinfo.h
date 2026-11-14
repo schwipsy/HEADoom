@@ -347,6 +347,16 @@ public:
 void CleanSWDrawer();
 sector_t* RenderViewpoint(FRenderViewpoint& mainvp, AActor* camera, IntRect* bounds, float fov, float ratio, float fovratio, bool mainview, bool toscreen);
 void WriteSavePic(player_t* player, FileWriter* file, int width, int height);
+
+// Splitscreen: the view currently being drawn into its part of the screen.
+struct FSplitViewState
+{
+	bool active = false;
+	int index = 0;
+	int count = 1;
+	IntRect rect;	// scene viewport rect (bottom-up, like mSceneViewport), before resolution scaling
+};
+extern FSplitViewState gSplitView;
 sector_t* RenderView(player_t* player);
 
 

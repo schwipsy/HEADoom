@@ -142,7 +142,7 @@ static int FindSplitscreenPlayer(int pad)
 //
 //==========================================================================
 
-bool G_AddSplitscreenPlayer(int pad)
+bool G_AddSplitscreenPlayer(int pad, bool force = false)
 {
 	if (gamestate != GS_LEVEL || netgame || primaryLevel == nullptr)
 	{
@@ -157,7 +157,7 @@ bool G_AddSplitscreenPlayer(int pad)
 		return false;
 	}
 	FSplitPadState s;
-	if (!I_GetSplitPadState(pad, s) || !s.connected)
+	if (!force && (!I_GetSplitPadState(pad, s) || !s.connected))
 	{
 		Printf("Controller %d is not connected.\n", pad + 1);
 		return false;
@@ -244,4 +244,13 @@ CCMD(splitscreen_leave)
 		return;
 	}
 	G_RemoveSplitscreenPlayer(atoi(argv[1]) - 1);
+}
+
+// Testing aid: adds a splitscreen player on the given controller slot even if
+// nothing is connected there (that player just stands still).
+CCMD(splitscreen_debugadd)
+{
+	const int pad = argv.argc() > 1 ? atoi(argv[1]) - 1 : 3;
+	if (G_AddSplitscreenPlayer(pad, true))
+		Printf("Debug splitscreen player added on controller slot %d.\n", pad + 1);
 }

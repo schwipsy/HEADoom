@@ -547,8 +547,8 @@ void OpenGLFrameBuffer::Draw2D()
 
 void OpenGLFrameBuffer::PostProcessScene(bool swscene, int fixedcm, float flash, const std::function<void()> &afterBloomDrawEndScene2D)
 {
-	const float scaleX = mSceneScaled ? mSceneViewport.width / (float)mFullSceneViewport.width : 1.f;
-	const float scaleY = mSceneScaled ? mSceneViewport.height / (float)mFullSceneViewport.height : 1.f;
+	const float scaleX = mSceneScaled ? mSceneScaleX : 1.f;
+	const float scaleY = mSceneScaled ? mSceneScaleY : 1.f;
 	RestoreSceneScale();
 	if (!swscene) GLRenderer->mBuffers->BlitSceneToTexture(scaleX, scaleY, ViewportLinearScale()); // Copy the resulting scene to the current post process texture
 	GLRenderer->PostProcessScene(fixedcm, flash, afterBloomDrawEndScene2D);

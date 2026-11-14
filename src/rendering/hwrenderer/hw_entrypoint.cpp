@@ -57,6 +57,11 @@ void CleanSWDrawer()
 #include "a_dynlight.h"
 
 
+FSplitViewState gSplitView;
+EXTERN_CVAR(Int, vr_mode)
+extern bool automapactive;
+int G_GetLocalPlayers(int out[MAXPLAYERS]);
+
 void CollectLights(FLevelLocals* Level, const DVector3& viewpos)
 {
 	IShadowMap* sm = &screen->mShadowMap;
@@ -99,6 +104,8 @@ sector_t* RenderViewpoint(FRenderViewpoint& mainvp, AActor* camera, IntRect* bou
 	auto& RenderState = *screen->RenderState();
 
 	R_SetupFrame(mainvp, r_viewwindow, camera);
+	if (mainview)
+		hw_LightCullViewPos = mainvp.Pos;
 
 	if (mainview && toscreen && !(camera->Level->flags3 & LEVEL3_NOSHADOWMAP) && camera->Level->HasDynamicLights && gl_light_shadowmap && screen->allowSSBO() && (screen->hwcaps & RFL_SHADER_STORAGE_BUFFER))
 	{
@@ -133,6 +140,20 @@ sector_t* RenderViewpoint(FRenderViewpoint& mainvp, AActor* camera, IntRect* bou
 		screen->SetViewportRects(bounds);
 		if (mainview && toscreen && bounds == nullptr && eyeCount == 1)
 			screen->ApplySceneScale(); // undone by the backend when it copies the scene into post-processing
+
+		if (gSplitView.active && mainview && toscreen)
+		{
+			// Splitscreen: draw this player's view into its part of the scene buffer.
+			IntRect r = gSplitView.rect;
+			if (screen->mSceneScaled)
+			{
+				r.left = (int)(r.left * screen->mSceneScaleX);
+				r.top = (int)(r.top * screen->mSceneScaleY);
+				r.width = max(1, (int)(r.width * screen->mSceneScaleX));
+				r.height = max(1, (int)(r.height * screen->mSceneScaleY));
+			}
+			screen->mSceneViewport = r;
+		}
 
 		if (mainview) // Bind the scene frame buffer and turn on draw buffers used by ssao
 		{
@@ -179,7 +200,23 @@ sector_t* RenderViewpoint(FRenderViewpoint& mainvp, AActor* camera, IntRect* bou
 				RenderState.EnableDrawBuffers(1);
 			}
 
-			screen->PostProcessScene(false, cm, flash, [&]() { di->DrawEndScene2D(mainvp.sector, RenderState); });
+			if (gSplitView.active && toscreen)
+			{
+				// Splitscreen: draw this view's weapon now, inside its own part of the screen,
+				// and post-process all views together after the last one.
+				const IntRect& r = screen->mSceneViewport;
+				const float sx = screen->mSceneScaled ? screen->mSceneScaleX : 1.f;
+				const float sy = screen->mSceneScaled ? screen->mSceneScaleY : 1.f;
+				RenderState.SetViewport(0, 0, (int)(screen->GetWidth() * sx), (int)(screen->GetHeight() * sy));
+				RenderState.SetScissor(r.left, r.top, r.width, r.height);
+				di->DrawEndScene2D(mainvp.sector, RenderState);
+				if (gSplitView.index == gSplitView.count - 1)
+					screen->PostProcessScene(false, cm, flash, []() {});
+			}
+			else
+			{
+				screen->PostProcessScene(false, cm, flash, [&]() { di->DrawEndScene2D(mainvp.sector, RenderState); });
+			}
 			PostProcess.Unclock();
 		}
 		// Reset colormap so 2D drawing isn't affected
@@ -311,6 +348,66 @@ static void CheckTimer(FRenderState &state, uint64_t ShaderStartTime)
 }
 
 
+//===========================================================================
+//
+// Splitscreen: renders every local player's view into its part of the screen.
+// 2 players: top and bottom halves. 3: two on top, one centred below.
+// 4: four equal quarters.
+//
+//===========================================================================
+
+void G_GetSplitViewRect(int index, int count, int& x, int& y, int& w, int& h)
+{
+	const int W = screen->GetWidth(), H = screen->GetHeight();
+	const int hw = W / 2, hh = H / 2;
+	switch (count)
+	{
+	case 2:  x = 0; y = index * hh; w = W; h = hh; break;
+	case 3:  if (index < 2) { x = index * hw; y = 0; } else { x = W / 4; y = hh; } w = hw; h = hh; break;
+	default: x = (index & 1) * hw; y = (index >> 1) * hh; w = hw; h = hh; break;
+	}
+}
+
+static sector_t* RenderSplitViews(const int* locals, int count)
+{
+	static FRenderViewpoint splitvp[MAXPLAYERS];
+
+	const int saved_w = viewwidth, saved_h = viewheight, saved_x = viewwindowx, saved_y = viewwindowy;
+	const float saved_ratio = r_viewwindow.WidescreenRatio;
+	sector_t* result = nullptr;
+
+	for (int v = 0; v < count; v++)
+	{
+		player_t* p = &players[locals[v]];
+		if (p->camera == nullptr)
+			continue;
+
+		int x, y, w, h;
+		G_GetSplitViewRect(v, count, x, y, w, h);
+
+		// The weapon and other per-view 2D code reads these globals (top-down screen coordinates).
+		viewwindowx = x; viewwindowy = y; viewwidth = w; viewheight = h;
+		const float ratio = w / (float)h;
+		r_viewwindow.WidescreenRatio = ratio;
+		const float fovratio = ratio >= 1.3f ? 1.333333f : ratio;
+
+		gSplitView.active = true;
+		gSplitView.index = v;
+		gSplitView.count = count;
+		gSplitView.rect = { x, screen->GetHeight() - (y + h), w, h };
+
+		FRenderViewpoint& vp = v == 0 ? r_viewpoint : splitvp[v];
+		if (v != 0) vp.TicFrac = r_viewpoint.TicFrac;
+		sector_t* sec = RenderViewpoint(vp, p->camera, NULL, r_viewpoint.FieldOfView.Degrees(), ratio, fovratio, true, true);
+		if (v == 0) result = sec;
+	}
+
+	gSplitView.active = false;
+	viewwidth = saved_w; viewheight = saved_h; viewwindowx = saved_x; viewwindowy = saved_y;
+	r_viewwindow.WidescreenRatio = saved_ratio;
+	return result;
+}
+
 sector_t* RenderView(player_t* player)
 {
 	auto RenderState = screen->RenderState();
@@ -403,7 +500,16 @@ sector_t* RenderView(player_t* player)
 
 		screen->ImageTransitionScene(true); // Only relevant for Vulkan.
 
-		retsec = RenderViewpoint(r_viewpoint, player->camera, NULL, r_viewpoint.FieldOfView.Degrees(), ratio, fovratio, true, true);
+		int locals[MAXPLAYERS];
+		const int localcount = (player == &players[consoleplayer] && vr_mode == 0 && !automapactive) ? G_GetLocalPlayers(locals) : 1;
+		if (localcount > 1)
+		{
+			retsec = RenderSplitViews(locals, localcount);
+		}
+		else
+		{
+			retsec = RenderViewpoint(r_viewpoint, player->camera, NULL, r_viewpoint.FieldOfView.Degrees(), ratio, fovratio, true, true);
+		}
 	}
 	All.Unclock();
 	return retsec;

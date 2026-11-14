@@ -680,7 +680,7 @@ void HWDrawInfo::PreparePlayerSprites2D(sector_t * viewsector, area_t in_area)
 	static unsigned ModifyBobLayerVIndex = GetVirtualIndex(wpCls, "ModifyBobLayer");
 	static VMFunction * ModifyBobLayerOrigFunc = wpCls->Virtuals.Size() > ModifyBobLayerVIndex ? wpCls->Virtuals[ModifyBobLayerVIndex] : nullptr;
 
-	AActor * playermo = players[consoleplayer].camera;
+	AActor * playermo = Viewpoint.camera;
 	player_t * player = playermo->player;
 
 	const auto &vp = Viewpoint;
@@ -762,7 +762,7 @@ void HWDrawInfo::PreparePlayerSprites3D(sector_t * viewsector, area_t in_area)
 	static VMFunction * ModifyBobLayer3DOrigFunc = wpCls->Virtuals.Size() > ModifyBobLayer3DVIndex ? wpCls->Virtuals[ModifyBobLayer3DVIndex] : nullptr;
 	static VMFunction * ModifyBobPivotLayer3DOrigFunc = wpCls->Virtuals.Size() > ModifyBobPivotLayer3DVIndex ? wpCls->Virtuals[ModifyBobPivotLayer3DVIndex] : nullptr;
 
-	AActor * playermo = players[consoleplayer].camera;
+	AActor * playermo = Viewpoint.camera;
 	player_t * player = playermo->player;
 
 	const auto &vp = Viewpoint;
@@ -877,7 +877,7 @@ void HWDrawInfo::PreparePlayerSprites3D(sector_t * viewsector, area_t in_area)
 void HWDrawInfo::PreparePlayerSprites(sector_t * viewsector, area_t in_area)
 {
 
-	AActor * playermo = players[consoleplayer].camera;
+	AActor * playermo = Viewpoint.camera;
 	player_t * player = playermo->player;
 
 	const auto &vp = Viewpoint;
@@ -915,7 +915,7 @@ void HWDrawInfo::PreparePlayerSprites(sector_t * viewsector, area_t in_area)
 
 void HWDrawInfo::PrepareTargeterSprites(double ticfrac)
 {
-	AActor * playermo = players[consoleplayer].camera;
+	AActor * playermo = Viewpoint.camera;
 	player_t * player = playermo->player;
 	AActor *camera = Viewpoint.camera;
 

@@ -43,6 +43,8 @@ CVAR (Bool, gl_light_particles, true, CVAR_ARCHIVE | CVAR_GLOBALCONFIG);
 CVAR(Float, r_light_distance_cull, 0.f, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 CVAR(Float, r_light_shadow_distance_cull, 0.f, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 
+DVector3 hw_LightCullViewPos;
+
 static constexpr float LIGHT_CULL_FADE = 0.15f; // fraction of the cull distance used for fading out
 
 float hw_LightDistanceFade(FDynamicLight* light, const DVector3& viewpos)
@@ -101,7 +103,7 @@ void AddLightToList(FDynLightData &dld, int group, FDynamicLight * light, bool f
 {
 	int i = 0;
 
-	const float fade = hw_LightDistanceFade(light, r_viewpoint.Pos);
+	const float fade = hw_LightDistanceFade(light, hw_LightCullViewPos);
 	if (fade <= 0.f)
 		return;
 

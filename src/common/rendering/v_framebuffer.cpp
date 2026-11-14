@@ -158,6 +158,7 @@ void DFrameBuffer::ApplySceneScale()
 	mFullSceneViewport = mSceneViewport;
 	const float scale = SupportsSceneScale() ? ViewportSceneScale() : 1.f;
 	mSceneScaled = scale < 1.f;
+	mSceneScaleX = mSceneScaleY = 1.f;
 	if (!mSceneScaled)
 		return;
 
@@ -165,6 +166,8 @@ void DFrameBuffer::ApplySceneScale()
 	mSceneViewport.top = (int)(mSceneViewport.top * scale);
 	mSceneViewport.width = max(1, (int)(mSceneViewport.width * scale));
 	mSceneViewport.height = max(1, (int)(mSceneViewport.height * scale));
+	mSceneScaleX = mSceneViewport.width / (float)mFullSceneViewport.width;
+	mSceneScaleY = mSceneViewport.height / (float)mFullSceneViewport.height;
 }
 
 void DFrameBuffer::SetViewportRects(IntRect *bounds)

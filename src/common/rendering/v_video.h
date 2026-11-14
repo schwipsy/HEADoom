@@ -208,6 +208,7 @@ public:
 	// the post-processing chain, so the HUD, menus and other 2D stay at native resolution.
 	IntRect mFullSceneViewport;
 	bool mSceneScaled = false;
+	float mSceneScaleX = 1.f, mSceneScaleY = 1.f;
 	virtual bool SupportsSceneScale() { return false; }
 	void ApplySceneScale();
 	void RestoreSceneScale()
