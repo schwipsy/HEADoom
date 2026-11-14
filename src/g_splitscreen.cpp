@@ -86,8 +86,9 @@ void G_BuildSplitscreenCmd(int pad, player_t* player, usercmd_t* cmd)
 	const float rx = StickAxis(s.rx), ry = StickAxis(s.ry);
 
 	cmd->buttons |= BT_RUN;
-	cmd->forwardmove = (int16_t)(ly * forwardmove[1]);
-	cmd->sidemove = (int16_t)(lx * sidemove[1]);
+	// G_BuildTiccmd shifts its movement left by 8 before sending, so do the same.
+	cmd->forwardmove = (int16_t)clamp(ly * forwardmove[1] * 256.f, -32767.f, 32767.f);
+	cmd->sidemove = (int16_t)clamp(lx * sidemove[1] * 256.f, -32767.f, 32767.f);
 
 	// Same scale as the engine's analog look (ANALOG_LOOK_BASE = 1280 per tic at full tilt).
 	const float look = 1280.f * splitscreen_lookspeed;
