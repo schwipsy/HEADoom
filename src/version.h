@@ -82,7 +82,7 @@
 	#define LOAD_GZDOOM_4142_SAVES 1
 #endif
 
-#define BASEWAD "uzdoom.pk3"
+#define BASEWAD "HEADoom.pk3"
 // Set OPTIONALWAD to "" (null) to disable searching for it
 #define OPTIONALWAD "game_support.pk3"
 #define GZDOOM 1
