@@ -23,6 +23,9 @@
 #include "d_protocol.h"
 #include "d_event.h"
 #include "g_game.h"
+#include "actor.h"
+#include "p_local.h"
+#include "p_checkposition.h"
 
 uint32_t I_SplitscreenReservedPads = 0;
 
@@ -138,6 +141,50 @@ static int FindSplitscreenPlayer(int pad)
 
 //==========================================================================
 //
+// Moves a freshly joined player next to player 1, so late joiners do not
+// appear at the map start (maps usually have only a player 1 start).
+// Leaves the player where it spawned if no free visible spot is found.
+//
+//==========================================================================
+
+static void PlaceBesidePlayer(AActor* mo, AActor* anchor)
+{
+	if (mo == nullptr || anchor == nullptr || mo == anchor)
+		return;
+
+	const double dist = anchor->radius + mo->radius + 16.;
+	// Left, right, behind, then the diagonals and front.
+	static const double offsets[] = { 90., -90., 180., 135., -135., 45., -45., 0. };
+	const DVector3 oldpos = mo->Pos();
+
+	for (double off : offsets)
+	{
+		const DAngle ang = anchor->Angles.Yaw + DAngle::fromDeg(off);
+		const DVector2 pos = anchor->Pos().XY() + ang.ToVector(dist);
+
+		FCheckPosition tm;
+		if (!P_CheckPosition(mo, pos, tm))
+			continue;
+		if (tm.ceilingz - tm.floorz < mo->Height)
+			continue;
+		if (fabs(tm.floorz - anchor->Z()) > mo->MaxStepHeight)
+			continue;
+
+		if (!P_TeleportMove(mo, DVector3(pos.X, pos.Y, tm.floorz), false))
+			continue;
+		if (!P_CheckSight(anchor, mo, SF_IGNOREVISIBILITY))
+		{
+			P_TeleportMove(mo, oldpos, false);
+			continue;
+		}
+		mo->Angles.Yaw = anchor->Angles.Yaw;
+		mo->ClearInterpolation();
+		return;
+	}
+}
+
+//==========================================================================
+//
 // Adds a splitscreen player driven by controller 'pad'.
 //
 //==========================================================================
@@ -197,6 +244,7 @@ bool G_AddSplitscreenPlayer(int pad, bool force = false)
 		return false;
 
 	players[slot].Bot->LocalPad = pad;
+	PlaceBesidePlayer(players[slot].mo, players[consoleplayer].mo);
 	I_SplitscreenReservedPads |= 1u << pad;
 	return true;
 }
