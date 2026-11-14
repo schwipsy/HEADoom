@@ -2486,7 +2486,7 @@ static int RemoveClass(FLevelLocals *Level, const PClass *cls)
 EXTERN_CVAR(Int, displaynametags)
 EXTERN_CVAR(Int, nametagcolor)
 
-static void SelectWeapon(int player, int slot)
+void SelectWeapon(int player, int slot)
 {
 	auto mo = players[player].mo;
 	if (mo == nullptr || gamestate != GS_LEVEL || paused

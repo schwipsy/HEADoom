@@ -171,7 +171,7 @@ public:
 
 	bool	 m_Thinking;
 
-private:
+public:
 	//(b_game.cpp)
 	bool DoAddBot (FLevelLocals *Level, TArrayView<uint8_t> info, botskill_t skill);
 
@@ -218,6 +218,7 @@ public:
 							// lift must go down before bot does anything
 							// radical like try a stuckmove
 	int			t_respawn;
+	int			LocalPad = -1;	// >= 0: a local splitscreen player driven by this controller
 	int			t_strafe;
 	int			t_react;
 	int			t_fight;

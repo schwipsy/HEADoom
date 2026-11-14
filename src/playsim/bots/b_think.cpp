@@ -35,6 +35,8 @@
 #include "d_player.h"
 #include "actorinlines.h"
 
+void G_BuildSplitscreenCmd(int pad, player_t* player, usercmd_t* cmd);
+
 static FRandom pr_botmove ("BotMove");
 
 //This function is called each tic for each bot,
@@ -44,6 +46,13 @@ void DBot::Think ()
 	usercmd_t *cmd = &player->cmd;
 
 	memset (cmd, 0, sizeof(*cmd));
+
+	if (LocalPad >= 0)
+	{
+		// Local splitscreen player: input comes from its own controller, not the bot AI.
+		G_BuildSplitscreenCmd(LocalPad, player, cmd);
+		return;
+	}
 
 	if (enemy && enemy->health <= 0)
 		enemy = nullptr;

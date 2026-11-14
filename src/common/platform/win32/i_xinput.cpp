@@ -210,6 +210,30 @@ CUSTOM_CVAR(Bool, joy_xinput, true, CVAR_GLOBALCONFIG|CVAR_ARCHIVE|CVAR_NOINITCA
 // PRIVATE DATA DEFINITIONS ------------------------------------------------
 
 static XInputGetStateType			InputGetState;
+
+#include "i_splitpad.h"
+
+// Direct read of one controller for local splitscreen players (see i_splitpad.h).
+bool I_GetSplitPadState(int pad, FSplitPadState& out)
+{
+	out = {};
+	if (InputGetState == nullptr || pad < 0 || pad >= XUSER_MAX_COUNT)
+		return false;
+	XINPUT_STATE state;
+	if (InputGetState(pad, &state) != ERROR_SUCCESS)
+		return false;
+	out.connected = true;
+	out.buttons = state.Gamepad.wButtons;
+	out.lt = state.Gamepad.bLeftTrigger;
+	out.rt = state.Gamepad.bRightTrigger;
+	out.lx = state.Gamepad.sThumbLX;
+	out.ly = state.Gamepad.sThumbLY;
+	out.rx = state.Gamepad.sThumbRX;
+	out.ry = state.Gamepad.sThumbRY;
+	return true;
+}
+
+
 static XInputSetStateType			InputSetState;
 static XInputGetCapabilitiesType	InputGetCapabilities;
 static XInputEnableType				InputEnable;
@@ -944,6 +968,8 @@ void FXInputManager::ProcessInput()
 {
 	for (int i = 0; i < XUSER_MAX_COUNT; ++i)
 	{
+		if (I_SplitscreenReservedPads & (1u << i))
+			continue; // owned by a splitscreen player
 		if(AppActive || Devices[i]->GetEnabledInBackground())
 		{
 			Devices[i]->ProcessInput();
@@ -963,7 +989,7 @@ void FXInputManager::AddAxes(float axes[NUM_AXIS_CODES])
 {
 	for (int i = 0; i < XUSER_MAX_COUNT; ++i)
 	{
-		if (Devices[i]->IsConnected())
+		if (Devices[i]->IsConnected() && !(I_SplitscreenReservedPads & (1u << i)))
 		{
 			Devices[i]->AddAxes(axes);
 		}
