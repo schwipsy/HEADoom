@@ -827,6 +827,14 @@ class SlideshowStarter : DummyStrifeItem
 {
 	override bool TryPickup (in out Actor toucher)
 	{
+		// Enter scripts also run for bots and splitscreen players joining a
+		// game in progress; the slideshow is full-screen and shared, so they
+		// must not start it again.
+		if (toucher.player != null && toucher.player.Bot != null)
+		{
+			GoAwayAndDie ();
+			return true;
+		}
 		Level.StartSlideshow();
 		if (level.levelnum == 10)
 		{
