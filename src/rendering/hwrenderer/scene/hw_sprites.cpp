@@ -62,6 +62,7 @@ const float MY_SQRT2    = 1.41421356237309504880; // sqrt(2)
 
 EXTERN_CVAR(Bool, r_debug_disable_vis_filter)
 EXTERN_CVAR(Float, transsouls)
+EXTERN_CVAR(Float, r_sprite_distance_cull)
 EXTERN_CVAR(Float, r_actorspriteshadowalpha)
 EXTERN_CVAR(Float, r_actorspriteshadowfadeheight)
 
@@ -800,6 +801,10 @@ void HWSprite::Process(HWDrawInfo *di, AActor* thing, sector_t * sector, area_t 
 	sector_t * rendersector;
 
 	if (thing == nullptr)
+		return;
+
+	// Distance culling, ported from LZDoom. 0 disables it.
+	if (r_sprite_distance_cull > 0.f && (thing->Pos() - di->Viewpoint.Pos).LengthSquared() > double(r_sprite_distance_cull) * r_sprite_distance_cull)
 		return;
 
 	// [ZZ] allow CustomSprite-style direct picnum specification

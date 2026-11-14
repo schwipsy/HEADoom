@@ -46,6 +46,20 @@ EXTERN_CVAR(Float, r_actorspriteshadowdist)
 EXTERN_CVAR(Bool, r_radarclipper)
 EXTERN_CVAR(Bool, r_dithertransparency)
 
+// Distance culling, ported from LZDoom. 0 disables it.
+// The cvar is defined by the software renderer sources (r_opaque_pass.cpp).
+EXTERN_CVAR(Float, r_line_distance_cull)
+
+static bool IsDistanceCulled(const seg_t* line, const FRenderViewpoint& vp)
+{
+	const double maxdist = r_line_distance_cull * r_line_distance_cull;
+	if (maxdist <= 0.0)
+		return false;
+
+	const DVector2 pos = (vp.bDoOob && r_radarclipper && !(vp.ViewLevel->flags3 & LEVEL3_NOFOGOFWAR)) ? vp.OffPos.XY() : vp.Pos.XY();
+	return (line->v1->fPos() - pos).LengthSquared() > maxdist && (line->v2->fPos() - pos).LengthSquared() > maxdist;
+}
+
 thread_local bool isWorkerThread;
 ctpl::thread_pool renderPool(1);
 bool inited = false;
@@ -331,6 +345,11 @@ void HWDrawInfo::AddLine (seg_t *seg, bool portalclip)
 
 	uint8_t ispoly = uint8_t(seg->sidedef->Flags & WALLF_POLYOBJ);
 
+	// A culled line is not drawn and hides everything behind it.
+	const bool isculled = IsDistanceCulled(seg, Viewpoint);
+	if (isculled)
+		clipper.SafeAddClipRange(startAngle, endAngle);
+
 	// [XA] NOTE: ideally it'd be nice to collapse these checks into one,
 	// but it's possible to add & remove WALLF_BLOCKRENDERING via zscript
 	// so auto-setting it on 1s lines may result in a crash if someone
@@ -382,7 +401,7 @@ void HWDrawInfo::AddLine (seg_t *seg, bool portalclip)
 	{
 		if (!ispoly) seg->linedef->validcount=validcount;
 
-		if (gl_render_walls)
+		if (gl_render_walls && !isculled)
 		{
 			if (multithread)
 			{
