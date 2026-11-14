@@ -20,6 +20,7 @@
 #include "hw_dynlightdata.h"
 #include"hw_cvars.h"
 #include "v_video.h"
+#include "r_utility.h"
 #include "hwrenderer/scene/hw_drawstructs.h"
 
 // If we want to share the array to avoid constant allocations it needs to be thread local unless it'd be littered with expensive synchronization.
@@ -34,6 +35,38 @@ thread_local FDynLightData lightdata;
 // These shouldn't be called 'gl...' anymore...
 CVAR (Bool, gl_light_sprites, true, CVAR_ARCHIVE | CVAR_GLOBALCONFIG);
 CVAR (Bool, gl_light_particles, true, CVAR_ARCHIVE | CVAR_GLOBALCONFIG);
+
+// Distance culling for dynamic lights. 0 disables it.
+// r_light_distance_cull: a light whose whole radius lies beyond this distance from the camera is skipped.
+//   It fades out over the last part of the distance instead of popping.
+// r_light_shadow_distance_cull: beyond this distance a light still renders, but casts no shadowmap shadows.
+CVAR(Float, r_light_distance_cull, 0.f, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+CVAR(Float, r_light_shadow_distance_cull, 0.f, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+
+static constexpr float LIGHT_CULL_FADE = 0.15f; // fraction of the cull distance used for fading out
+
+float hw_LightDistanceFade(FDynamicLight* light, const DVector3& viewpos)
+{
+	const float maxdist = r_light_distance_cull;
+	if (maxdist <= 0.f)
+		return 1.f;
+
+	// Distance from the camera to the nearest edge of the light's sphere.
+	const float edge = float((light->Pos - viewpos).Length()) - light->GetRadius();
+	if (edge >= maxdist)
+		return 0.f;
+
+	const float fadestart = maxdist * (1.f - LIGHT_CULL_FADE);
+	if (edge <= fadestart)
+		return 1.f;
+	return (maxdist - edge) / (maxdist - fadestart);
+}
+
+bool hw_LightShadowCulled(FDynamicLight* light, const DVector3& viewpos)
+{
+	const double maxdist = r_light_shadow_distance_cull;
+	return maxdist > 0. && (light->Pos - viewpos).LengthSquared() > maxdist * maxdist;
+}
 
 
 //==========================================================================
@@ -68,6 +101,10 @@ void AddLightToList(FDynLightData &dld, int group, FDynamicLight * light, bool f
 {
 	int i = 0;
 
+	const float fade = hw_LightDistanceFade(light, r_viewpoint.Pos);
+	if (fade <= 0.f)
+		return;
+
 	DVector3 pos = light->PosRelative(group);
 	float radius = light->GetRadius();
 
@@ -81,6 +118,7 @@ void AddLightToList(FDynLightData &dld, int group, FDynamicLight * light, bool f
 	{
 		cs = 1.0f;
 	}
+	cs *= fade;
 
 	if (light->target && (light->target->renderflags2 & RF2_LIGHTMULTALPHA))
 		cs *= (float)light->target->Alpha;

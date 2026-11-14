@@ -126,6 +126,9 @@ void HWDrawInfo::GetDynSpriteLight(AActor *self, float x, float y, float z, FSec
 			light=node->lightsource;
 			if (light->ShouldLightActor(self))
 			{
+				const float distfade = hw_LightDistanceFade(light, Viewpoint.Pos);
+				if (distfade <= 0.f) continue;
+
 				float dist;
 				FVector3 L;
 
@@ -153,7 +156,7 @@ void HWDrawInfo::GetDynSpriteLight(AActor *self, float x, float y, float z, FSec
 				{
 					dist = sqrtf(dist);	// only calculate the square root if we really need it.
 
-					frac = 1.0f - (dist / radius);
+					frac = (1.0f - (dist / radius)) * distfade;
 
 					if (light->IsSpot())
 					{
@@ -168,7 +171,8 @@ void HWDrawInfo::GetDynSpriteLight(AActor *self, float x, float y, float z, FSec
 						frac *= (float)smoothstep(light->pSpotOuterAngle->Cos(), light->pSpotInnerAngle->Cos(), cosDir);
 					}
 
-					if (frac > 0 && (!light->shadowmapped || (light->GetRadius() > 0 && screen->mShadowMap.ShadowTest(light->Pos, { x, y, z }))))
+					const bool shadowed = light->shadowmapped && !hw_LightShadowCulled(light, Viewpoint.Pos);
+					if (frac > 0 && (!shadowed || (light->GetRadius() > 0 && screen->mShadowMap.ShadowTest(light->Pos, { x, y, z }))))
 					{
 						lr = light->GetRed() / 255.0f;
 						lg = light->GetGreen() / 255.0f;

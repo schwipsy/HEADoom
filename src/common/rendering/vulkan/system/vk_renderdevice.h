@@ -72,6 +72,7 @@ public:
 	VulkanRenderDevice(void *hMonitor, bool fullscreen, std::shared_ptr<VulkanSurface> surface);
 	~VulkanRenderDevice();
 	bool IsVulkan() override { return true; }
+	bool SupportsSceneScale() override { return true; }
 
 	void Update() override;
 

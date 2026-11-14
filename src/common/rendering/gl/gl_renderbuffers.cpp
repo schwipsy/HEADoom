@@ -504,25 +504,42 @@ void FGLRenderBuffers::ClearFrameBuffer(bool stencil, bool depth)
 //
 //==========================================================================
 
-void FGLRenderBuffers::BlitSceneToTexture()
+void FGLRenderBuffers::BlitSceneToTexture(float scaleX, float scaleY, bool linear)
 {
 	mCurrentPipelineTexture = 0;
+	const bool scaled = scaleX < 1.f || scaleY < 1.f;
 
-	if (mSamples <= 1)
-		return;
-
-	glBindFramebuffer(GL_READ_FRAMEBUFFER, mSceneFB.handle);
-	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, mPipelineFB[mCurrentPipelineTexture].handle);
-	glBlitFramebuffer(0, 0, mWidth, mHeight, 0, 0, mWidth, mHeight, GL_COLOR_BUFFER_BIT, GL_NEAREST);
-
-	if ((gl.flags & RFL_INVALIDATE_BUFFER) != 0)
+	if (mSamples > 1)
 	{
-		GLenum attachments[2] = { GL_COLOR_ATTACHMENT0, GL_DEPTH_STENCIL_ATTACHMENT };
-		glInvalidateFramebuffer(GL_READ_FRAMEBUFFER, 2, attachments);
+		// Resolve the multisampled scene into the first pipeline texture.
+		glBindFramebuffer(GL_READ_FRAMEBUFFER, mSceneFB.handle);
+		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, mPipelineFB[0].handle);
+		glBlitFramebuffer(0, 0, mWidth, mHeight, 0, 0, mWidth, mHeight, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+
+		if ((gl.flags & RFL_INVALIDATE_BUFFER) != 0)
+		{
+			GLenum attachments[2] = { GL_COLOR_ATTACHMENT0, GL_DEPTH_STENCIL_ATTACHMENT };
+			glInvalidateFramebuffer(GL_READ_FRAMEBUFFER, 2, attachments);
+		}
 	}
 
-	glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
-	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+	if (scaled)
+	{
+		// 3D-only resolution scale: the scene was drawn into the lower-left part of the buffer.
+		// Stretch it over the whole second pipeline texture and continue from there.
+		const int srcW = max(1, (int)(mWidth * scaleX + 0.5f));
+		const int srcH = max(1, (int)(mHeight * scaleY + 0.5f));
+		glBindFramebuffer(GL_READ_FRAMEBUFFER, mPipelineFB[0].handle);
+		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, mPipelineFB[1].handle);
+		glBlitFramebuffer(0, 0, srcW, srcH, 0, 0, mWidth, mHeight, GL_COLOR_BUFFER_BIT, linear ? GL_LINEAR : GL_NEAREST);
+		mCurrentPipelineTexture = 1;
+	}
+
+	if (mSamples > 1 || scaled)
+	{
+		glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+	}
 }
 
 //==========================================================================

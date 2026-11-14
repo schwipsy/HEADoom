@@ -136,7 +136,7 @@ public:
 	void BindSceneFogTexture(int index);
 	void BindSceneNormalTexture(int index);
 	void BindSceneDepthTexture(int index);
-	void BlitSceneToTexture();
+	void BlitSceneToTexture(float scaleX = 1.f, float scaleY = 1.f, bool linear = false);
 
 	void BindCurrentTexture(int index, int filter = GL_NEAREST, int wrap = GL_CLAMP_TO_EDGE);
 	void BindCurrentFB();

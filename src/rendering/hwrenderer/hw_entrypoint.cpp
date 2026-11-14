@@ -57,7 +57,7 @@ void CleanSWDrawer()
 #include "a_dynlight.h"
 
 
-void CollectLights(FLevelLocals* Level)
+void CollectLights(FLevelLocals* Level, const DVector3& viewpos)
 {
 	IShadowMap* sm = &screen->mShadowMap;
 	int lightindex = 0;
@@ -66,7 +66,7 @@ void CollectLights(FLevelLocals* Level)
 	for (auto light = Level->lights; light; light = light->next)
 	{
 		IShadowMap::LightsProcessed++;
-		if (light->shadowmapped && light->IsActive() && lightindex < 1024)
+		if (light->shadowmapped && light->IsActive() && lightindex < 1024 && !hw_LightShadowCulled(light, viewpos))
 		{
 			IShadowMap::LightsShadowmapped++;
 
@@ -103,8 +103,9 @@ sector_t* RenderViewpoint(FRenderViewpoint& mainvp, AActor* camera, IntRect* bou
 	if (mainview && toscreen && !(camera->Level->flags3 & LEVEL3_NOSHADOWMAP) && camera->Level->HasDynamicLights && gl_light_shadowmap && screen->allowSSBO() && (screen->hwcaps & RFL_SHADER_STORAGE_BUFFER))
 	{
 		screen->SetAABBTree(camera->Level->aabbTree);
+		const DVector3 viewpos = mainvp.Pos;
 		screen->mShadowMap.SetCollectLights([=] {
-			CollectLights(camera->Level);
+			CollectLights(camera->Level, viewpos);
 		});
 		screen->UpdateShadowMap();
 	}
@@ -130,6 +131,8 @@ sector_t* RenderViewpoint(FRenderViewpoint& mainvp, AActor* camera, IntRect* bou
 	{
 		const auto& eye = vrmode->mEyes[eye_ix];
 		screen->SetViewportRects(bounds);
+		if (mainview && toscreen && bounds == nullptr && eyeCount == 1)
+			screen->ApplySceneScale(); // undone by the backend when it copies the scene into post-processing
 
 		if (mainview) // Bind the scene frame buffer and turn on draw buffers used by ssao
 		{

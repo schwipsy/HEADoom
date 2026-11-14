@@ -116,6 +116,50 @@ void VkPostprocess::BlitSceneToPostprocess()
 
 	mCurrentPipelineImage = 0;
 
+	// 3D-only resolution scale: the scene was drawn into the lower-left part of the buffers.
+	// Stretch that part over the whole image while copying it into post-processing.
+	const bool scaled = fb->mSceneScaled;
+	const float scale = scaled ? fb->mSceneViewport.width / (float)fb->mFullSceneViewport.width : 1.f;
+	const float scaleY = scaled ? fb->mSceneViewport.height / (float)fb->mFullSceneViewport.height : 1.f;
+	fb->RestoreSceneScale();
+	const VkFilter scaleFilter = ViewportLinearScale() ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
+
+	if (scaled && buffers->GetSceneSamples() != VK_SAMPLE_COUNT_1_BIT)
+	{
+		// Resolve into the second pipeline image, then stretch it into the first one.
+		auto sceneColor = buffers->SceneColor.Image.get();
+		VkImageTransition()
+			.AddImage(&buffers->SceneColor, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, false)
+			.AddImage(&buffers->PipelineImage[1], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, true)
+			.Execute(cmdbuffer);
+
+		VkImageResolve resolve = {};
+		resolve.srcSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
+		resolve.dstSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
+		resolve.extent = { (uint32_t)sceneColor->width, (uint32_t)sceneColor->height, 1 };
+		cmdbuffer->resolveImage(
+			sceneColor->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+			buffers->PipelineImage[1].Image->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+			1, &resolve);
+
+		VkImageTransition()
+			.AddImage(&buffers->PipelineImage[1], VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, false)
+			.AddImage(&buffers->PipelineImage[mCurrentPipelineImage], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, true)
+			.Execute(cmdbuffer);
+
+		auto src = buffers->PipelineImage[1].Image.get();
+		VkImageBlit blit = {};
+		blit.srcOffsets[1] = { max(1, (int)(src->width * scale + 0.5f)), max(1, (int)(src->height * scaleY + 0.5f)), 1 };
+		blit.srcSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
+		blit.dstOffsets[1] = { src->width, src->height, 1 };
+		blit.dstSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
+		cmdbuffer->blitImage(
+			src->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+			buffers->PipelineImage[mCurrentPipelineImage].Image->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+			1, &blit, scaleFilter);
+		return;
+	}
+
 	VkImageTransition()
 		.AddImage(&buffers->SceneColor, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, false)
 		.AddImage(&buffers->PipelineImage[mCurrentPipelineImage], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, true)
@@ -146,7 +190,7 @@ void VkPostprocess::BlitSceneToPostprocess()
 		auto sceneColor = buffers->SceneColor.Image.get();
 		VkImageBlit blit = {};
 		blit.srcOffsets[0] = { 0, 0, 0 };
-		blit.srcOffsets[1] = { sceneColor->width, sceneColor->height, 1 };
+		blit.srcOffsets[1] = { max(1, (int)(sceneColor->width * scale + 0.5f)), max(1, (int)(sceneColor->height * scaleY + 0.5f)), 1 };
 		blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 		blit.srcSubresource.mipLevel = 0;
 		blit.srcSubresource.baseArrayLayer = 0;
@@ -160,7 +204,7 @@ void VkPostprocess::BlitSceneToPostprocess()
 		cmdbuffer->blitImage(
 			sceneColor->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
 			buffers->PipelineImage[mCurrentPipelineImage].Image->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-			1, &blit, VK_FILTER_NEAREST);
+			1, &blit, scaled ? scaleFilter : VK_FILTER_NEAREST);
 	}
 }
 

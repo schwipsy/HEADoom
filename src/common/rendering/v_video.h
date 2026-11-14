@@ -203,6 +203,22 @@ public:
 	inline int GetWidth() const { return Width; }
 	inline int GetHeight() const { return Height; }
 
+	// Resolution scale for the 3D scene only (vid_scalefactor). The scene is rendered into a
+	// smaller part of the scene buffers and stretched back to full size when it is copied into
+	// the post-processing chain, so the HUD, menus and other 2D stay at native resolution.
+	IntRect mFullSceneViewport;
+	bool mSceneScaled = false;
+	virtual bool SupportsSceneScale() { return false; }
+	void ApplySceneScale();
+	void RestoreSceneScale()
+	{
+		if (mSceneScaled)
+		{
+			mSceneViewport = mFullSceneViewport;
+			mSceneScaled = false;
+		}
+	}
+
 	FVector2 SceneScale() const
 	{
 		return { mSceneViewport.width / (float)mScreenViewport.width, mSceneViewport.height / (float)mScreenViewport.height };

@@ -171,7 +171,7 @@ void R_ShowCurrentScaling();
 CUSTOM_CVAR(Float, vid_scalefactor, 1.0, CVAR_ARCHIVE | CVAR_GLOBALCONFIG | CVAR_NOINITCALL)
 {
 	setsizeneeded = true;
-	if (self < 0.05 || self > 2.0)
+	if (self < 0.05 || self > 1.0)
 		self = 1.0;
 	if (self != 1.0)
 		R_ShowCurrentScaling();
@@ -204,14 +204,8 @@ bool ViewportLinearScale()
 
 	if (isOutOfBounds(vid_scalemode))
 		vid_scalemode = 0;
-	// always use linear if supersampling
-	int x = screen->GetClientWidth(), y = screen->GetClientHeight();
-	float aspectmult = ViewportPixelAspect();
-	if (aspectmult > 1.f)
-		aspectmult = 1.f / aspectmult;
-	if ((ViewportScaledWidth(x,y) > (x * aspectmult)) || (ViewportScaledHeight(x,y) > (y * aspectmult)))
-		return true;
-
+	// Headcutter: always honour vid_scale_linear (default off = crisp nearest-neighbour
+	// pixels), also when supersampling, instead of forcing smooth filtering.
 	return vid_scale_linear;
 }
 
@@ -228,7 +222,16 @@ int ViewportScaledWidth(int width, int height)
 		width = ((float)width/height > ActiveRatio(width, height)) ? (int)(height * ActiveRatio(width, height)) : width;
 		height = ((float)width/height < ActiveRatio(width, height)) ? (int)(width / ActiveRatio(width, height)) : height;
 	}
-	return (int)max((int32_t)min_width, (int32_t)(vid_scalefactor * vScaleTable[vid_scalemode].GetScaledWidth(width, height)));
+	// Headcutter: vid_scalefactor no longer scales the whole frame (and with it the UI);
+	// it only scales the 3D scene, see ViewportSceneScale().
+	return (int)max((int32_t)min_width, (int32_t)(vScaleTable[vid_scalemode].GetScaledWidth(width, height)));
+}
+
+float ViewportSceneScale()
+{
+	if (IsVideoMenuActive())
+		return 1.f;
+	return clamp((float)vid_scalefactor, 0.05f, 1.f);
 }
 
 int ViewportScaledHeight(int width, int height)
@@ -243,7 +246,7 @@ int ViewportScaledHeight(int width, int height)
 		height = ((float)width/height < ActiveRatio(width, height)) ? (int)(width / ActiveRatio(width, height)) : height;
 		width = ((float)width/height > ActiveRatio(width, height)) ? (int)(height * ActiveRatio(width, height)) : width;
 	}
-	return (int)max((int32_t)min_height, (int32_t)(vid_scalefactor * vScaleTable[vid_scalemode].GetScaledHeight(width, height)));
+	return (int)max((int32_t)min_height, (int32_t)(vScaleTable[vid_scalemode].GetScaledHeight(width, height)));
 }
 
 float ViewportPixelAspect()

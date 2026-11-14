@@ -57,7 +57,31 @@ static bool IsDistanceCulled(const seg_t* line, const FRenderViewpoint& vp)
 		return false;
 
 	const DVector2 pos = (vp.bDoOob && r_radarclipper && !(vp.ViewLevel->flags3 & LEVEL3_NOFOGOFWAR)) ? vp.OffPos.XY() : vp.Pos.XY();
-	return (line->v1->fPos() - pos).LengthSquared() > maxdist && (line->v2->fPos() - pos).LengthSquared() > maxdist;
+
+	// Distance to the closest point on the segment. Checking only the two end points
+	// (as LZDoom does) wrongly culls long lines that pass close to the camera.
+	const DVector2 a = line->v1->fPos();
+	const DVector2 d = line->v2->fPos() - a;
+	const double len2 = d.LengthSquared();
+	double t = len2 > 0. ? ((pos - a) | d) / len2 : 0.;
+	t = clamp(t, 0., 1.);
+	return (a + d * t - pos).LengthSquared() > maxdist;
+}
+
+// Closed doors (back sector floor and ceiling meet) already hide what is behind them when
+// their upper/lower textures are set (hw_CheckClip). This also treats them as solid when the
+// map leaves those textures empty. Off by default: such gaps then show nothing behind them.
+CVAR(Bool, r_closeddoor_occlusion, false, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+
+static bool IsClosedDoor(const seg_t* seg, sector_t* backsector)
+{
+	if (backsector->GetTexture(sector_t::ceiling) == skyflatnum || backsector->GetTexture(sector_t::floor) == skyflatnum)
+		return false; // keep the classic sky hacks working
+	if (!(backsector->GetPortal(sector_t::ceiling)->mFlags & PORTSF_SKYFLATONLY) || !(backsector->GetPortal(sector_t::floor)->mFlags & PORTSF_SKYFLATONLY))
+		return false; // never close off portals
+	const line_t* line = seg->linedef;
+	return backsector->ceilingplane.ZatPoint(line->v1) <= backsector->floorplane.ZatPoint(line->v1) &&
+		backsector->ceilingplane.ZatPoint(line->v2) <= backsector->floorplane.ZatPoint(line->v2);
 }
 
 thread_local bool isWorkerThread;
@@ -382,7 +406,7 @@ void HWDrawInfo::AddLine (seg_t *seg, bool portalclip)
 
 			backsector = hw_FakeFlat(seg->backsector, in_area, true);
 
-			if (hw_CheckClip(seg->sidedef, currentsector, backsector))
+			if (hw_CheckClip(seg->sidedef, currentsector, backsector) || (r_closeddoor_occlusion && IsClosedDoor(seg, backsector)))
 			{
 				if(!doOob && !(seg->sidedef->Flags & WALLF_DITHERTRANS_MID))
 					clipper.SafeAddClipRange(startAngle, endAngle);

@@ -26,6 +26,7 @@
 #define __VIDEOSCALE_H__
 EXTERN_CVAR (Int, vid_scalemode)
 bool ViewportLinearScale();
+float ViewportSceneScale();
 int ViewportScaledWidth(int width, int height);
 int ViewportScaledHeight(int width, int height);
 float ViewportPixelAspect();

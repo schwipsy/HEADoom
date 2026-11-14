@@ -153,8 +153,23 @@ FTexture *DFrameBuffer::WipeEndScreen()
 //
 //==========================================================================
 
+void DFrameBuffer::ApplySceneScale()
+{
+	mFullSceneViewport = mSceneViewport;
+	const float scale = SupportsSceneScale() ? ViewportSceneScale() : 1.f;
+	mSceneScaled = scale < 1.f;
+	if (!mSceneScaled)
+		return;
+
+	mSceneViewport.left = (int)(mSceneViewport.left * scale);
+	mSceneViewport.top = (int)(mSceneViewport.top * scale);
+	mSceneViewport.width = max(1, (int)(mSceneViewport.width * scale));
+	mSceneViewport.height = max(1, (int)(mSceneViewport.height * scale));
+}
+
 void DFrameBuffer::SetViewportRects(IntRect *bounds)
 {
+	mSceneScaled = false;
 	if (bounds)
 	{
 		mSceneViewport = *bounds;
