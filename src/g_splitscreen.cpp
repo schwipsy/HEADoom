@@ -254,8 +254,63 @@ void G_RemoveSplitscreenPlayer(int pad)
 	const int pnum = FindSplitscreenPlayer(pad);
 	if (pnum < 0 || primaryLevel == nullptr)
 		return;
-	primaryLevel->BotInfo.ClearPlayer(pnum, false);
+	// Leave like a disconnecting network player. Unlike FCajunMaster::ClearPlayer
+	// this keeps the slot's userinfo alive: mods may hold per-player CVar
+	// references to it, and destroying them would leave those dangling.
+	G_DoPlayerPop(pnum);
+	if (players[pnum].Bot != nullptr)
+	{
+		players[pnum].Bot->Destroy();
+		players[pnum].Bot = nullptr;
+	}
 	I_SplitscreenReservedPads &= ~(1u << pad);
+}
+
+//==========================================================================
+//
+// Joining and leaving changes the player list, so it must happen inside the
+// game tic. Console commands typed by the user run outside of it, between
+// client prediction and its rollback, which would throw the new player away.
+// The commands only queue a request; G_Ticker applies it.
+//
+//==========================================================================
+
+struct FSplitscreenRequest
+{
+	int pad;
+	bool leave;
+	bool force;
+};
+static TArray<FSplitscreenRequest> SplitscreenRequests;
+
+void G_RunSplitscreenRequests()
+{
+	for (auto& req : SplitscreenRequests)
+	{
+		if (req.leave)
+		{
+			if (FindSplitscreenPlayer(req.pad) >= 0)
+			{
+				G_RemoveSplitscreenPlayer(req.pad);
+				Printf("Controller %d left.\n", req.pad + 1);
+			}
+		}
+		else if (G_AddSplitscreenPlayer(req.pad, req.force))
+		{
+			Printf("Controller %d joined.\n", req.pad + 1);
+		}
+	}
+	SplitscreenRequests.Clear();
+}
+
+static void QueueSplitscreenRequest(int pad, bool leave, bool force)
+{
+	if (pad < 0 || pad >= SPLITPAD_MAX)
+	{
+		Printf("Controller number must be 1-%d.\n", SPLITPAD_MAX);
+		return;
+	}
+	SplitscreenRequests.Push({ pad, leave, force });
 }
 
 CCMD(splitscreen_join)
@@ -274,14 +329,13 @@ CCMD(splitscreen_join)
 			if (FindSplitscreenPlayer(i) < 0 && I_GetSplitPadState(i, s) && s.connected)
 				pad = i;
 		}
+		if (pad < 0)
+		{
+			Printf("No free controller found. Usage: splitscreen_join [controller 1-4]\n");
+			return;
+		}
 	}
-	if (pad < 0)
-	{
-		Printf("No free controller found. Usage: splitscreen_join [controller 1-4]\n");
-		return;
-	}
-	if (G_AddSplitscreenPlayer(pad))
-		Printf("Controller %d joined.\n", pad + 1);
+	QueueSplitscreenRequest(pad, false, false);
 }
 
 CCMD(splitscreen_leave)
@@ -291,14 +345,12 @@ CCMD(splitscreen_leave)
 		Printf("Usage: splitscreen_leave <controller 1-4>\n");
 		return;
 	}
-	G_RemoveSplitscreenPlayer(atoi(argv[1]) - 1);
+	QueueSplitscreenRequest(atoi(argv[1]) - 1, true, false);
 }
 
 // Testing aid: adds a splitscreen player on the given controller slot even if
 // nothing is connected there (that player just stands still).
 CCMD(splitscreen_debugadd)
 {
-	const int pad = argv.argc() > 1 ? atoi(argv[1]) - 1 : 3;
-	if (G_AddSplitscreenPlayer(pad, true))
-		Printf("Debug splitscreen player added on controller slot %d.\n", pad + 1);
+	QueueSplitscreenRequest(argv.argc() > 1 ? atoi(argv[1]) - 1 : 3, false, true);
 }

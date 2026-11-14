@@ -1221,6 +1221,8 @@ static void D_CheckCutsceneAdvance()
 // G_Ticker
 // Make ticcmd_ts for the players.
 //
+void G_RunSplitscreenRequests();
+
 void G_Ticker ()
 {
 	gamestate_t oldgamestate;
@@ -1356,6 +1358,7 @@ void G_Ticker ()
 	}
 
 	C_RunDelayedCommands();
+	G_RunSplitscreenRequests();
 
 	// do main actions
 	switch (gamestate)
