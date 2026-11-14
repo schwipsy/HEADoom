@@ -93,6 +93,34 @@ jobs:
           [[ "${{ contains(needs.*.result, 'failure') }}" == "false" ]] || exit 1
           [[ "${{ contains(needs.*.result, 'cancelled') }}" == "false" ]] || exit 1
 
+  publish-builds:
+    name: Publish Windows build
+    needs:
+      - debinfo
+    if: ${{ always() && github.event_name == 'push' && github.ref == 'refs/heads/headcutter' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download
+        uses: actions/download-artifact@v8
+        with:
+          name: Windows RelWithDebInfo
+          path: artifact
+      - name: Push to builds branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir out
+          unzip -q artifact/*.zip -d out
+          cd out
+          rm -f *.pdb
+          echo "${{ github.sha }}" > BUILD.txt
+          git init -q -b builds
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Windows build of ${{ github.sha }}"
+          git push -f "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}" builds
+
 # ======================
 # Release Configuration
 # ======================
