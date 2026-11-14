@@ -88,7 +88,7 @@ OptionMenu ScalingOptionsSimple protected
 	StaticText " "
 	StaticText "$VIDMNU_TITLE"
 	Option "$VIDMNU_SCALEMODE",			"vid_scalemode", "ScaleModes"
-	Slider "$VIDMNU_SCALEFACTOR",		"vid_scalefactor", 0.25, 1.0, 0.05, 2
+	Option "$VIDMNU_SCALEFACTOR",		"vid_scalefactor", "SceneScales"
 }
 
 OptionMenu MiscOptionsSimple protected

@@ -21,6 +21,7 @@
 */
 
 #include "v_video.h"
+#include "r_videoscale.h"
 #include "hw_postprocess.h"
 #include "hw_cvars.h"
 #include "hwrenderer/postprocessing/hw_postprocess_cvars.h"
@@ -344,7 +345,9 @@ void PPLensDistort::Render(PPRenderState *renderstate)
 	renderstate->Shader = &Lens;
 	renderstate->Uniforms.Set(uniforms);
 	renderstate->Viewport = screen->mScreenViewport;
-	renderstate->SetInputCurrent(0, PPFilterMode::Linear);
+	// Keep the chunky pixels of a scaled-down 3D view sharp instead of smoothing them.
+	const bool crisp = ViewportSceneScale() < 1.f && !ViewportLinearScale();
+	renderstate->SetInputCurrent(0, crisp ? PPFilterMode::Nearest : PPFilterMode::Linear);
 	renderstate->SetOutputNext();
 	renderstate->SetNoBlend();
 	renderstate->Draw();
