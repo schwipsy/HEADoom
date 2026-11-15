@@ -49,6 +49,8 @@
 #include "po_man.h"
 #include "printf.h"
 #include "s_music.h"
+
+int G_GetLocalPlayers(int out[MAXPLAYERS]);
 #include "s_sndseq.h"
 #include "s_sound.h"
 #include "serializer_doom.h"
@@ -1122,6 +1124,36 @@ void DoomSoundEngine::CalcPosVel(int type, const void* source, const float pt[3]
 			if ((chanflags & CHANF_LISTENERZ) && players[consoleplayer].camera != nullptr)
 			{
 				pos->Y = (float)listenpos.Z;
+			}
+
+			// Splitscreen: the engine has one listener (the console player's camera). Every sound is
+			// heard as if it played next to the local player closest to it, by moving it by the
+			// offset between that player's camera and the listener.
+			if (listener != nullptr && type != SOURCE_None)
+			{
+				int locals[MAXPLAYERS];
+				const int count = G_GetLocalPlayers(locals);
+				if (count > 1)
+				{
+					const FVector3 lpos = listener->SoundPos();
+					auto dist2 = [&](const FVector3& a) { return (a - *pos).LengthSquared(); };
+					float best = dist2(lpos);
+					FVector3 bestpos = lpos;
+					for (int i = 0; i < count; i++)
+					{
+						AActor* cam = players[locals[i]].camera;
+						if (cam == nullptr || cam == listener || cam->Level != listener->Level)
+							continue;
+						const FVector3 cpos = cam->SoundPos();
+						const float d = dist2(cpos);
+						if (d < best)
+						{
+							best = d;
+							bestpos = cpos;
+						}
+					}
+					*pos += lpos - bestpos;
+				}
 			}
 		}
 	}
