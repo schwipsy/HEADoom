@@ -36,5 +36,6 @@ void G_SplitMenuTicker();
 void G_DrawSplitMenu(int pnum);
 bool G_QueueSplitMenuNetEvent(const FString& name, int arg1, int arg2, int arg3, bool manual);
 void G_RunSplitMenuNetEvents();
+void G_QueueSplitNetEvent(int player, const FString& name, int arg1, int arg2, int arg3, bool manual);
 void G_ClearSplitMenus();
 bool G_SplitMenuAllowsPause();

@@ -30,6 +30,7 @@
 #include "p_local.h"
 #include "p_checkposition.h"
 #include "sbar.h"
+#include "menustate.h"
 
 uint32_t I_SplitscreenReservedPads = 0;
 FSplitFrame gSplitFrame;
@@ -50,6 +51,7 @@ CVAR(Float, splitscreen_lookspeed, 1.f, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 CVAR(Bool, splitscreen_invertlook, false, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 
 static uint16_t PrevButtons[SPLITPAD_MAX];
+static bool CrouchToggle[SPLITPAD_MAX];
 
 static float StickAxis(int16_t raw)
 {
@@ -67,8 +69,9 @@ static float StickAxis(int16_t raw)
 // Builds one tic of input for a splitscreen player from its controller.
 // Default layout (Xbox names):
 //   left stick move, right stick look, RT fire, LT alt-fire, A jump,
-//   B crouch, X use, Y reload, RB / LB next / previous weapon,
-//   right stick click zoom.
+//   B crouch (toggle), Y use, X reload, LB / RB ability 1 / 2 (both: 3),
+//   d-pad left / right previous / next weapon, right stick click zoom,
+//   Start main menu.
 //
 //==========================================================================
 
@@ -89,6 +92,7 @@ void G_BuildSplitscreenCmd(int pad, player_t* player, usercmd_t* cmd)
 	player->MinPitch = players[consoleplayer].MinPitch;
 	player->MaxPitch = players[consoleplayer].MaxPitch;
 
+	const uint16_t PrevButtonsBeforeTic = PrevButtons[pad];
 	const uint16_t pressed = s.buttons & ~PrevButtons[pad];
 	PrevButtons[pad] = s.buttons;
 
@@ -109,20 +113,34 @@ void G_BuildSplitscreenCmd(int pad, player_t* player, usercmd_t* cmd)
 	cmd->yaw = (int16_t)clamp(-rx * fabsf(rx) * look, -32767.f, 32767.f);
 	cmd->pitch = (int16_t)clamp((splitscreen_invertlook ? -ry : ry) * fabsf(ry) * look * 0.6f, -32767.f, 32767.f);
 
+	const int pnum = int(player - players);
+	const uint16_t released = PrevButtonsBeforeTic & ~s.buttons;
+
 	if (s.rt > 64) cmd->buttons |= BT_ATTACK;
 	if (s.lt > 64) cmd->buttons |= BT_ALTATTACK;
 	if (s.buttons & SPLITPAD_A) cmd->buttons |= BT_JUMP;
-	if (s.buttons & SPLITPAD_B) cmd->buttons |= BT_CROUCH;
-	if (s.buttons & SPLITPAD_X) cmd->buttons |= BT_USE;
-	if (s.buttons & SPLITPAD_Y) cmd->buttons |= BT_RELOAD;
+	if (pressed & SPLITPAD_B) CrouchToggle[pad] = !CrouchToggle[pad];
+	if (player->playerstate != PST_LIVE) CrouchToggle[pad] = false;
+	if (CrouchToggle[pad]) cmd->buttons |= BT_CROUCH;
+	if (s.buttons & SPLITPAD_Y) cmd->buttons |= BT_USE;
+	if (s.buttons & SPLITPAD_X) cmd->buttons |= BT_RELOAD;
 	if (s.buttons & SPLITPAD_RTHUMB) cmd->buttons |= BT_ZOOM;
 
-	const int pnum = int(player - players);
-	if (pressed & SPLITPAD_RB) SelectWeapon(pnum, WST_NEXT);
-	if (pressed & SPLITPAD_LB) SelectWeapon(pnum, WST_PREV);
+	if (pressed & SPLITPAD_DPAD_RIGHT) SelectWeapon(pnum, WST_NEXT);
+	if (pressed & SPLITPAD_DPAD_LEFT) SelectWeapon(pnum, WST_PREV);
+
+	// Abilities (pointsystem): LB = 1, RB = 2, both together = 3 (the mod resolves the combo).
+	if (pressed & SPLITPAD_LB) G_QueueSplitNetEvent(pnum, "ability_down", 1, 0, 0, false);
+	if (released & SPLITPAD_LB) G_QueueSplitNetEvent(pnum, "ability_up", 1, 0, 0, false);
+	if (pressed & SPLITPAD_RB) G_QueueSplitNetEvent(pnum, "ability_down", 2, 0, 0, false);
+	if (released & SPLITPAD_RB) G_QueueSplitNetEvent(pnum, "ability_up", 2, 0, 0, false);
+
+	// Start: main menu (shared).
+	if ((pressed & SPLITPAD_START) && menuactive == MENU_Off)
+		C_DoCommand("menu_main");
 
 	// Dead: fire, jump or use respawns.
-	if (player->playerstate == PST_DEAD && (s.rt > 64 || (s.buttons & (SPLITPAD_A | SPLITPAD_X))))
+	if (player->playerstate == PST_DEAD && (s.rt > 64 || (s.buttons & (SPLITPAD_A | SPLITPAD_Y))))
 		cmd->buttons |= BT_USE;
 }
 

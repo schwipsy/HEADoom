@@ -263,8 +263,14 @@ bool G_QueueSplitMenuNetEvent(const FString& name, int arg1, int arg2, int arg3,
 {
 	if (G_SplitMenuSender < 0)
 		return false;
-	SplitNetEvents.Push({ G_SplitMenuSender, name, { arg1, arg2, arg3 }, manual });
+	G_QueueSplitNetEvent(G_SplitMenuSender, name, arg1, arg2, arg3, manual);
 	return true;
+}
+
+// A network event sent on behalf of a local splitscreen player (run in the next G_Ticker).
+void G_QueueSplitNetEvent(int player, const FString& name, int arg1, int arg2, int arg3, bool manual)
+{
+	SplitNetEvents.Push({ player, name, { arg1, arg2, arg3 }, manual });
 }
 
 void G_RunSplitMenuNetEvents()
