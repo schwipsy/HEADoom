@@ -206,6 +206,7 @@ void P_Ticker (void)
 		return;
 	}
 
+	G_TickSplitRevive();
 	DPSprite::NewTick();
 
 	// [RH] Frozen mode is only changed every 4 tics, to make it work with A_Tracer().

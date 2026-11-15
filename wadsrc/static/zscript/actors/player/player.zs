@@ -799,6 +799,16 @@ class PlayerPawn : Actor
 			}
 		}
 
+		// Splitscreen: while a partner is alive, wait to be revived (see g_splitrevive.cpp).
+		if (splitscreen_players > 1)
+		{
+			for (int i = 0; i < MAXPLAYERS; i++)
+			{
+				if (playeringame[i] && players[i] != player && players[i].mo && players[i].playerstate == PST_LIVE && players[i].health > 0)
+					return;
+			}
+		}
+
 		if ((player.cmd.buttons & BT_USE ||
 			((deathmatch || alwaysapplydmflags) && sv_forcerespawn)) && !sv_norespawn)
 		{

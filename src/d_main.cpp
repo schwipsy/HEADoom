@@ -1450,6 +1450,7 @@ void D_Display ()
 					StatusBar->SetScale();
 					gSplitFrame.current = v;
 					drawHud(gSplitFrame.sector[v], true);
+					G_DrawSplitReviveHud(gSplitFrame.player[v]);
 					// Gameplay menus (upgrade menus, ...) are drawn inside their player's view.
 					if (gSplitFrame.player[v] == restore.cp)
 					{
