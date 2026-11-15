@@ -208,9 +208,40 @@ DEFINE_ACTION_FUNCTION_NATIVE(DShape2D, PushTriangle, Shape2D_PushTriangle)
 //
 //==========================================================================
 
+// When set, every 2D command is scissored to this screen rectangle (left, top, right, bottom).
+// Used to keep a splitscreen HUD inside its own view.
+static bool ForceScissor;
+static int ForcedScissor[4];
+
+void F2D_SetForcedScissor(int left, int top, int right, int bottom)
+{
+	ForceScissor = true;
+	ForcedScissor[0] = left; ForcedScissor[1] = top; ForcedScissor[2] = right; ForcedScissor[3] = bottom;
+}
+
+void F2D_ClearForcedScissor()
+{
+	ForceScissor = false;
+}
+
 int F2DDrawer::AddCommand(RenderCommand *data)
 {
 	data->mScreenFade = screenFade;
+	if (ForceScissor)
+	{
+		if (data->mFlags & DTF_Scissor)
+		{
+			data->mScissor[0] = std::max(data->mScissor[0], ForcedScissor[0]);
+			data->mScissor[1] = std::max(data->mScissor[1], ForcedScissor[1]);
+			data->mScissor[2] = std::max(data->mScissor[0], std::min(data->mScissor[2], ForcedScissor[2]));
+			data->mScissor[3] = std::max(data->mScissor[1], std::min(data->mScissor[3], ForcedScissor[3]));
+		}
+		else
+		{
+			memcpy(data->mScissor, ForcedScissor, sizeof(ForcedScissor));
+			data->mFlags |= DTF_Scissor;
+		}
+	}
 	if (mData.Size() > 0 && data->isCompatible(mData.Last()))
 	{
 		// Merge with the last command.

@@ -81,6 +81,11 @@ void G_BuildSplitscreenCmd(int pad, player_t* player, usercmd_t* cmd)
 		return;
 	}
 
+	// Pitch limits normally arrive over the network for the local player only;
+	// without them this player's pitch is clamped to 0.
+	player->MinPitch = players[consoleplayer].MinPitch;
+	player->MaxPitch = players[consoleplayer].MaxPitch;
+
 	const uint16_t pressed = s.buttons & ~PrevButtons[pad];
 	PrevButtons[pad] = s.buttons;
 
@@ -234,8 +239,10 @@ bool G_AddSplitscreenPlayer(int pad, bool force = false)
 		return false;
 
 	static const char* const colors[] = { "40 cf 00", "bf 00 00", "00 00 ff", "ff ff 00" };
-	FString info;
-	info.Format("\\name\\Player %d\\color\\%s", count + 1, colors[count & 3]);
+	// Start from player 1's userinfo so per-player mod settings (user cvars) match
+	// what player 1 configured, then give this player their own name and color.
+	FString info = D_GetUserInfoStrings(consoleplayer, false);
+	info.AppendFormat("\\name\\Player %d\\color\\%s", count + 1, colors[count & 3]);
 
 	botskill_t skill = {};
 	TArray<uint8_t> buf;

@@ -381,4 +381,8 @@ public:
 };
 
 
+// Splitscreen: scissor all 2D commands to a screen rectangle (see v_2ddrawer.cpp).
+void F2D_SetForcedScissor(int left, int top, int right, int bottom);
+void F2D_ClearForcedScissor();
+
 #endif
