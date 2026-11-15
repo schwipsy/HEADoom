@@ -73,15 +73,17 @@ ADD_STAT(thingcull)
 //==========================================================================
 //
 // How far a thing's model reaches from its origin, in map units.
-// Returns false if it is not drawn as a model or the mesh size is not known yet.
+// Returns 0 if it is not drawn as a model, -1 if it is but the mesh size is
+// not known (not built yet, or a format that does not report it), 1 if known.
 //
 //==========================================================================
 
-static bool GetModelReach(AActor *thing, double &reachXY, double &reachFull)
+static int GetModelReach(AActor *thing, double &reachXY, double &reachFull)
 {
-	if (thing->picnum.isValid()) return false;
+	if (thing->picnum.isValid()) return 0;
 	FSpriteModelFrame *smf = FindModelFrame(thing, thing->sprite, thing->frame, !!(thing->flags & MF_DROPPED));
-	if (smf == nullptr || smf->isVoxel) return false;
+	if (smf == nullptr) return 0;
+	if (smf->isVoxel) return -1;
 
 	double rxy = 0, rfull = 0;
 	auto add = [&](int id) -> bool
@@ -95,17 +97,17 @@ static bool GetModelReach(AActor *thing, double &reachXY, double &reachFull)
 	};
 	for (unsigned i = 0; i < smf->modelIDs.Size(); i++)
 	{
-		if (!add(smf->modelIDs[i])) return false;
+		if (!add(smf->modelIDs[i])) return -1;
 	}
 	DActorModelData *data = thing->modelData;
 	if (data != nullptr)
 	{
 		for (auto &mo : data->models)
 		{
-			if (!add(mo.modelID)) return false;
+			if (!add(mo.modelID)) return -1;
 		}
 	}
-	if (rfull <= 0) return false;
+	if (rfull <= 0) return -1;
 
 	const unsigned flags = smf->getFlags(data);
 	const double hscale = max(fabs(smf->xscale), fabs(smf->yscale)) * fabs(thing->Scale.X);
@@ -123,7 +125,7 @@ static bool GetModelReach(AActor *thing, double &reachXY, double &reachFull)
 	// The 1.25 covers pixel stretch correction and frame interpolation.
 	reachFull = (rfull * fscale + offFull) * 1.25 + pivot;
 	reachXY = tilted ? reachFull : (rxy * hscale + offXY) * 1.25 + pivot;
-	return true;
+	return 1;
 }
 
 //==========================================================================
@@ -178,7 +180,7 @@ static bool IsLodCulled(AActor *thing, const DVector3 &viewpos)
 
 		double size = max(thing->radius * 2, thing->Height);
 		double reachXY, reachFull;
-		if (GetModelReach(thing, reachXY, reachFull)) size = max(size, reachFull * 2);
+		if (GetModelReach(thing, reachXY, reachFull) > 0) size = max(size, reachFull * 2);
 		check = clamp<double>(gl_autolod_factor * size, minDist, max<double>(minDist, gl_autolod_max));
 		if (dist < check * check) return false;
 	}
@@ -866,7 +868,9 @@ void HWDrawInfo::MarkOccludedThings(sector_t *sector)
 		if (thing->flags9 & MF9_IGNORECULLING) continue;
 
 		double reach, extra;
-		if (!GetModelReach(thing, reach, extra) && !GetSpriteReach(thing, reach, extra)) continue;
+		const int model = GetModelReach(thing, reach, extra);
+		if (model < 0) continue;	// a model of unknown size: cannot tell what it covers
+		if (model == 0 && !GetSpriteReach(thing, reach, extra)) continue;
 		const double touch = thing->RenderRadius();
 		// Things drawn much wider than the area they are linked into could show
 		// parts over sectors that were walked earlier, so leave those alone.
