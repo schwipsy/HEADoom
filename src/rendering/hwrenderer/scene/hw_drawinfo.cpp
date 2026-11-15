@@ -1000,6 +1000,16 @@ void HWDrawInfo::DrawScene(int drawmode)
 	static int ssao_portals_available = 0;
 	auto& vp = Viewpoint;
 
+	// Light distance culling measures from this view's own position. Inside a
+	// portal the view sits on the far side, so lights seen through the portal
+	// are measured along the line of sight instead of from the camera.
+	struct LightCullPosGuard
+	{
+		DVector3 saved = hw_LightCullViewPos;
+		~LightCullPosGuard() { hw_LightCullViewPos = saved; }
+	} lightCullPosGuard;
+	hw_LightCullViewPos = vp.Pos;
+
 	bool applySSAO = false;
 	if (drawmode == DM_MAINVIEW)
 	{
