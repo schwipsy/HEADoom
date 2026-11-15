@@ -23,6 +23,7 @@
 #include "b_bot.h"
 #include "doomstat.h"
 #include "sbar.h"
+#include "g_splitscreen.h"
 #include "r_data/r_interpolate.h"
 #include "d_player.h"
 #include "r_utility.h"
@@ -84,6 +85,7 @@ void P_RunClientSideLogic()
 		}
 
 		StatusBar->CallTick();
+		G_TickSplitStatusBars();
 
 		// TODO: Should this be called on all maps...?
 		if (gamestate == GS_LEVEL)

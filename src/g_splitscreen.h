@@ -20,3 +20,5 @@ struct FSplitFrame
 };
 
 extern FSplitFrame gSplitFrame;
+
+void G_TickSplitStatusBars();

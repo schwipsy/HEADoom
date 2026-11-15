@@ -1416,11 +1416,13 @@ void D_Display ()
 				struct FSplitHudRestore
 				{
 					int cp = consoleplayer;
+					DBaseStatusBar* sb = StatusBar;
 					player_t* cplayer = StatusBar->CPlayer;
 					int vx = viewwindowx, vy = viewwindowy, vw = viewwidth, vh = viewheight;
 					~FSplitHudRestore()
 					{
 						consoleplayer = cp;
+						StatusBar = sb;
 						StatusBar->CPlayer = cplayer;
 						viewwindowx = vx; viewwindowy = vy; viewwidth = vw; viewheight = vh;
 						twod->SetSize(screen->GetWidth(), screen->GetHeight());
@@ -1432,6 +1434,8 @@ void D_Display ()
 
 				for (int v = 0; v < gSplitFrame.count; v++)
 				{
+					consoleplayer = restore.cp;
+					StatusBar = ST_GetSplitStatusBar(gSplitFrame.player[v], restore.sb);
 					consoleplayer = gSplitFrame.player[v];
 					StatusBar->CPlayer = &players[consoleplayer];
 					viewwindowx = viewwindowy = 0;

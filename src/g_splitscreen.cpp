@@ -29,6 +29,7 @@
 #include "actor.h"
 #include "p_local.h"
 #include "p_checkposition.h"
+#include "sbar.h"
 
 uint32_t I_SplitscreenReservedPads = 0;
 FSplitFrame gSplitFrame;
@@ -270,6 +271,7 @@ void G_RemoveSplitscreenPlayer(int pad)
 	// this keeps the slot's userinfo alive: mods may hold per-player CVar
 	// references to it, and destroying them would leave those dangling.
 	G_DoPlayerPop(pnum);
+	ST_ReleaseSplitStatusBar(pnum);
 	if (players[pnum].Bot != nullptr)
 	{
 		players[pnum].Bot->Destroy();
@@ -388,4 +390,37 @@ DEFINE_ACTION_FUNCTION(_PlayerInfo, UsingGamepad)
 {
 	PARAM_SELF_STRUCT_PROLOGUE(player_t);
 	ACTION_RETURN_BOOL(G_PlayerUsesGamepad(int(self - players)));
+}
+
+//==========================================================================
+//
+// Ticks the own status bar of every extra local player, as that player.
+//
+//==========================================================================
+
+void G_TickSplitStatusBars()
+{
+	if (StatusBar == nullptr)
+		return;
+	int locals[MAXPLAYERS];
+	const int count = G_GetLocalPlayers(locals);
+	if (count <= 1)
+		return;
+
+	DBaseStatusBar* const mainbar = StatusBar;
+	const int cp = consoleplayer;
+	for (int i = 0; i < count; i++)
+	{
+		if (locals[i] == cp)
+			continue;
+		DBaseStatusBar* sb = ST_GetSplitStatusBar(locals[i], mainbar);
+		if (sb == nullptr || sb == mainbar)
+			continue;
+		StatusBar = sb;
+		consoleplayer = locals[i];
+		sb->CPlayer = &players[locals[i]];
+		sb->CallTick();
+		consoleplayer = cp;
+		StatusBar = mainbar;
+	}
 }

@@ -459,6 +459,8 @@ DBaseStatusBar *CreateCustomStatusBar(int script=0);
 void ST_LoadCrosshair(bool alwaysload=false);
 void ST_Clear();
 void ST_CreateStatusBar(bool bTitleLevel);
+DBaseStatusBar* ST_GetSplitStatusBar(int pnum, DBaseStatusBar* mainbar);
+void ST_ReleaseSplitStatusBar(int pnum);
 
 int GetInventoryIcon(AActor *item, uint32_t flags, int *applyscale = nullptr);
 

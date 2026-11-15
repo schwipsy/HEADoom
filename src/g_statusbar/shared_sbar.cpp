@@ -233,6 +233,23 @@ void ST_LoadCrosshair(bool alwaysload)
 //
 //---------------------------------------------------------------------------
 
+// Splitscreen: every extra local player gets an own status bar instance, so state kept
+// inside the bar (interpolated numbers and bars, mugshot, etc.) is not shared between views.
+static DBaseStatusBar* SplitStatusBars[MAXPLAYERS];
+static bool LastStatusBarTitleLevel;
+
+static void ST_ClearSplitStatusBars()
+{
+	for (auto& sb : SplitStatusBars)
+	{
+		if (sb != nullptr)
+		{
+			sb->Destroy();
+			sb = nullptr;
+		}
+	}
+}
+
 void ST_Clear()
 {
 	if (StatusBar != NULL)
@@ -240,6 +257,7 @@ void ST_Clear()
 		StatusBar->Destroy();
 		StatusBar = NULL;
 	}
+	ST_ClearSplitStatusBars();
 	ST_UnloadCrosshair();
 }
 
@@ -285,6 +303,8 @@ static void CreateGameInfoStatusBar(bool &shouldWarn)
 	}
 }
 
+static void ST_BuildStatusBar(bool bTitleLevel, int pnum);
+
 void ST_CreateStatusBar(bool bTitleLevel)
 {
 	if (StatusBar != NULL)
@@ -292,8 +312,46 @@ void ST_CreateStatusBar(bool bTitleLevel)
 		StatusBar->Destroy();
 		StatusBar = NULL;
 	}
+	ST_ClearSplitStatusBars();
 	GC::AddMarkerFunc([]() { GC::Mark(StatusBar); });
+	static bool splitMarker = false;
+	if (!splitMarker)
+	{
+		splitMarker = true;
+		GC::AddMarkerFunc([]() { for (auto& sb : SplitStatusBars) GC::Mark(sb); });
+	}
+	LastStatusBarTitleLevel = bTitleLevel;
+	ST_BuildStatusBar(bTitleLevel, consoleplayer);
+}
 
+// Returns the status bar that draws the HUD of local player pnum. The main bar for the
+// console player, an own instance (created on first use) for other splitscreen players.
+DBaseStatusBar* ST_GetSplitStatusBar(int pnum, DBaseStatusBar* mainbar)
+{
+	if (mainbar == nullptr || pnum < 0 || pnum >= MAXPLAYERS || pnum == consoleplayer)
+		return mainbar;
+	if (SplitStatusBars[pnum] == nullptr)
+	{
+		DBaseStatusBar* saved = StatusBar;
+		StatusBar = nullptr;
+		ST_BuildStatusBar(LastStatusBarTitleLevel, pnum);
+		SplitStatusBars[pnum] = StatusBar;
+		StatusBar = saved;
+	}
+	return SplitStatusBars[pnum];
+}
+
+void ST_ReleaseSplitStatusBar(int pnum)
+{
+	if (pnum >= 0 && pnum < MAXPLAYERS && SplitStatusBars[pnum] != nullptr)
+	{
+		SplitStatusBars[pnum]->Destroy();
+		SplitStatusBars[pnum] = nullptr;
+	}
+}
+
+static void ST_BuildStatusBar(bool bTitleLevel, int pnum)
+{
 	bool shouldWarn = true;
 
 	if (bTitleLevel)
@@ -361,7 +419,7 @@ void ST_CreateStatusBar(bool bTitleLevel)
 	}
 
 	GC::WriteBarrier(StatusBar);
-	StatusBar->AttachToPlayer(&players[consoleplayer]);
+	StatusBar->AttachToPlayer(&players[pnum]);
 	StatusBar->NewGame();
 }
 //---------------------------------------------------------------------------
