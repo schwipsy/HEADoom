@@ -199,6 +199,8 @@ public:
 	SBarPerPlayer() = default;
 	SBarPerPlayer(T x) { for (auto& e : v) e = x; }
 	operator T() const { return cur(); }
+	T& get() { return cur(); }
+	const T& get() const { return cur(); }
 	SBarPerPlayer& operator=(T x)
 	{
 		if (SBarInfoCurrentPlayer < 0) for (auto& e : v) e = x;

@@ -22,6 +22,7 @@
 #include "v_font.h"
 #include "v_text.h"
 #include "printf.h"
+#include "vm.h"
 
 int G_GetLocalPlayers(int out[MAXPLAYERS]);
 
@@ -195,4 +196,29 @@ CCMD(splitscreen_debugkill)
 	if (pnum < 0 || pnum >= MAXPLAYERS || !IsUp(pnum))
 		return;
 	P_DamageMobj(players[pnum].mo, nullptr, nullptr, TELEFRAG_DAMAGE, NAME_None);
+}
+
+// Testing: splitscreen_give <player 1-4> <item> [amount]
+CCMD(splitscreen_give)
+{
+	if (argv.argc() < 3)
+	{
+		Printf("Usage: splitscreen_give <player 1-4> <item> [amount]\n");
+		return;
+	}
+	const int pnum = atoi(argv[1]) - 1;
+	if (pnum < 0 || pnum >= MAXPLAYERS || !playeringame[pnum] || players[pnum].mo == nullptr)
+		return;
+	PClassActor* cls = PClass::FindActor(argv[2]);
+	if (cls == nullptr)
+	{
+		Printf("Unknown item '%s'\n", argv[2]);
+		return;
+	}
+	const int amount = argv.argc() > 3 ? atoi(argv[3]) : 1;
+	IFVM(Actor, GiveInventory)
+	{
+		VMValue params[] = { players[pnum].mo, cls, amount, false };
+		VMCall(func, params, 4, nullptr, 0);
+	}
 }

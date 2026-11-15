@@ -676,14 +676,14 @@ class CommandDrawString : public SBarInfoCommand
 		{
 			if(lineBreaks)
 			{
-				auto lines = V_BreakLines(font, breakWidth, str.GetChars());
+				auto lines = V_BreakLines(font, breakWidth, str.get().GetChars());
 				for(unsigned i = 0; i < lines.Size();i++)
 				{
 					statusBar->DrawString(font, lines[i].Text.GetChars(), x, y+i*(font->GetHeight()+4), block->XOffset(), block->YOffset(), block->Alpha(), block->FullScreenOffsets(), translation, spacing, shadow, shadowX, shadowY);
 				}
 			}
 			else
-				statusBar->DrawString(font, str.GetChars(), x, y, block->XOffset(), block->YOffset(), block->Alpha(), block->FullScreenOffsets(), translation, spacing, shadow, shadowX, shadowY);
+				statusBar->DrawString(font, str.get().GetChars(), x, y, block->XOffset(), block->YOffset(), block->Alpha(), block->FullScreenOffsets(), translation, spacing, shadow, shadowX, shadowY);
 		}
 		void	Parse(FScanner &sc, bool fullScreenOffsets)
 		{
@@ -837,7 +837,7 @@ class CommandDrawString : public SBarInfoCommand
 					if(primaryLevel->lumpnum != cache)
 					{
 						cache = primaryLevel->lumpnum;
-						str = primaryLevel->LevelName;
+						str.get() = primaryLevel->LevelName;
 						RealignString();
 					}
 					break;
@@ -845,8 +845,8 @@ class CommandDrawString : public SBarInfoCommand
 					if(primaryLevel->lumpnum != cache)
 					{
 						cache = primaryLevel->lumpnum;
-						str = primaryLevel->MapName;
-						str.ToUpper();
+						str.get() = primaryLevel->MapName;
+						str.get().ToUpper();
 						RealignString();
 					}
 					break;
@@ -854,7 +854,7 @@ class CommandDrawString : public SBarInfoCommand
 					if(primaryLevel->lumpnum != cache) // Can only change skill between primaryLevel->
 					{
 						cache = primaryLevel->lumpnum;
-						str = G_SkillName();
+						str.get() = G_SkillName();
 						RealignString();
 					}
 					break;
@@ -862,7 +862,7 @@ class CommandDrawString : public SBarInfoCommand
 					if(statusBar->CPlayer->userinfo.GetPlayerClassNum() != cache)
 					{
 						cache = statusBar->CPlayer->userinfo.GetPlayerClassNum();
-						str = GetPrintableDisplayName(statusBar->CPlayer->cls);
+						str.get() = GetPrintableDisplayName(statusBar->CPlayer->cls);
 						RealignString();
 					}
 					break;
@@ -881,14 +881,14 @@ class CommandDrawString : public SBarInfoCommand
 				case PLAYERNAME:
 					// Can't think of a good way to detect changes to this, so
 					// I guess copying it every tick will have to do.
-					str = statusBar->CPlayer->userinfo.GetName();
+					str.get() = statusBar->CPlayer->userinfo.GetName();
 					RealignString();
 					break;
 				case GLOBALVAR:
 					if(ACS_GlobalVars[valueArgument] != cache)
 					{
 						cache = ACS_GlobalVars[valueArgument];
-						str = primaryLevel->Behaviors.LookupString(ACS_GlobalVars[valueArgument]);
+						str.get() = primaryLevel->Behaviors.LookupString(ACS_GlobalVars[valueArgument]);
 						RealignString();
 					}
 					break;
@@ -896,21 +896,21 @@ class CommandDrawString : public SBarInfoCommand
 					if(ACS_GlobalArrays[valueArgument][consoleplayer] != cache)
 					{
 						cache = ACS_GlobalArrays[valueArgument][consoleplayer];
-						str = primaryLevel->Behaviors.LookupString(ACS_GlobalArrays[valueArgument][consoleplayer]);
+						str.get() = primaryLevel->Behaviors.LookupString(ACS_GlobalArrays[valueArgument][consoleplayer]);
 						RealignString();
 					}
 					break;
 				case TIME:
 				{
 					int sec = Tics2Seconds(primaryLevel->time);
-					str.Format("%02d:%02d:%02d", sec / 3600, (sec % 3600) / 60, sec % 60);
+					str.get().Format("%02d:%02d:%02d", sec / 3600, (sec % 3600) / 60, sec % 60);
 					break;
 				}
 				case LOGTEXT:
-					str = GStrings.GetString(statusBar->CPlayer->LogText);
+					str.get() = GStrings.GetString(statusBar->CPlayer->LogText);
 					break;
 				default:
-					str = GStrings.localize(label.GetChars());
+					str.get() = GStrings.localize(label.GetChars());
 					RealignString();
 					break;
 			}
@@ -932,15 +932,15 @@ class CommandDrawString : public SBarInfoCommand
 				break;
 			case ALIGN_RIGHT:
 				if(script->spacingCharacter == '\0')
-					x -= static_cast<int> (font->StringWidth(str)+(spacing * str.Len()));
+					x -= static_cast<int> (font->StringWidth(str.get())+(spacing * str.get().Len()));
 				else //monospaced, so just multiplay the character size
-					x -= static_cast<int> ((font->GetCharWidth((unsigned char) script->spacingCharacter) + spacing) * str.Len());
+					x -= static_cast<int> ((font->GetCharWidth((unsigned char) script->spacingCharacter) + spacing) * str.get().Len());
 				break;
 			case ALIGN_CENTER:
 				if(script->spacingCharacter == '\0')
-					x -= static_cast<int> ((font->StringWidth(str)+(spacing * str.Len())) / 2);
+					x -= static_cast<int> ((font->StringWidth(str.get())+(spacing * str.get().Len())) / 2);
 				else
-					x -= static_cast<int> ((font->GetCharWidth((unsigned char) script->spacingCharacter) + spacing) * str.Len() / 2);
+					x -= static_cast<int> ((font->GetCharWidth((unsigned char) script->spacingCharacter) + spacing) * str.get().Len() / 2);
 				break;
 			}
 		}
@@ -975,10 +975,10 @@ class CommandDrawString : public SBarInfoCommand
 		SBarInfoCoordinate	startX;
 		SBarInfoCoordinate	x;
 		SBarInfoCoordinate	y;
-		intptr_t			cache; /// General purpose cache.
+		SBarPerPlayer<intptr_t>	cache; /// General purpose cache.
 		StringValueType		strValue;
 		int					valueArgument;
-		FString				str;
+		SBarPerPlayer<FString>	str;
 		FString				label;
 		StringAlignment		alignment;
 
@@ -990,14 +990,14 @@ class CommandDrawString : public SBarInfoCommand
 				if ((intptr_t)actor->GetClass() != cache)
 				{
 					cache = (intptr_t)actor->GetClass();
-					str = actor->GetTag();
+					str.get() = actor->GetTag();
 					RealignString();
 				}
 			}
 			else
 			{
 				cache = -1;
-				str = "";
+				str.get() = "";
 			}
 		}
 };
@@ -1253,7 +1253,7 @@ class CommandDrawNumber : public CommandDrawString
 					if(strValue == CommandDrawString::CONSTANT)
 					{
 						usePrefix = false; // Use prefix just determines if we tick the string.
-						prefixPadding = str + prefixPadding;
+						prefixPadding = str.get() + prefixPadding;
 					}
 					sc.MustGetToken(')');
 				}
@@ -1323,7 +1323,7 @@ class CommandDrawNumber : public CommandDrawString
 				case AMMO1:
 					if(statusBar->ammo1 == NULL) //no ammo, do not draw
 					{
-						str = "";
+						str.get() = "";
 						return;
 					}
 					num = statusBar->ammocount1;
@@ -1331,7 +1331,7 @@ class CommandDrawNumber : public CommandDrawString
 				case AMMO2:
 					if(statusBar->ammo2 == NULL) //no ammo, do not draw
 					{
-						str = "";
+						str.get() = "";
 						return;
 					}
 					num = statusBar->ammocount2;
@@ -1348,7 +1348,7 @@ class CommandDrawNumber : public CommandDrawString
 				case AMMO1CAPACITY:
 					if(statusBar->ammo1 == NULL) //no ammo, do not draw
 					{
-						str = "";
+						str.get() = "";
 						return;
 					}
 					else
@@ -1357,7 +1357,7 @@ class CommandDrawNumber : public CommandDrawString
 				case AMMO2CAPACITY:
 					if(statusBar->ammo2 == NULL) //no ammo, do not draw
 					{
-						str = "";
+						str.get() = "";
 						return;
 					}
 					else
@@ -1500,7 +1500,7 @@ class CommandDrawNumber : public CommandDrawString
 				drawValue = num;
 			if(whenNotZero && drawValue == 0)
 			{
-				str = "";
+				str.get() = "";
 				return;
 			}
 
@@ -1529,9 +1529,9 @@ class CommandDrawNumber : public CommandDrawString
 			}
 
 			if(useFillZeros)
-				str.Format("%s%s%0*d", usePrefix ? str.GetChars() : "", prefixPadding.GetChars(), drawValue < 0 ? length - 1 : length, drawValue);
+				str.get().Format("%s%s%0*d", usePrefix ? str.get().GetChars() : "", prefixPadding.GetChars(), drawValue < 0 ? length - 1 : length, (int)drawValue);
 			else
-				str.Format("%s%s%d", usePrefix ? str.GetChars() : "", prefixPadding.GetChars(), drawValue);
+				str.get().Format("%s%s%d", usePrefix ? str.get().GetChars() : "", prefixPadding.GetChars(), (int)drawValue);
 
 			RealignString();
 		}
