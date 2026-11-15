@@ -25,3 +25,16 @@ struct FSplitFrame
 extern FSplitFrame gSplitFrame;
 
 void G_TickSplitStatusBars();
+
+class DMenu;
+class FName;
+class FString;
+bool G_IsGameplayMenu(DMenu* menu);
+bool G_SplitMenuOpen(int pnum);
+void G_OpenMenuForPlayer(FName name, int pnum);
+void G_SplitMenuTicker();
+void G_DrawSplitMenu(int pnum);
+bool G_QueueSplitMenuNetEvent(const FString& name, int arg1, int arg2, int arg3, bool manual);
+void G_RunSplitMenuNetEvents();
+void G_ClearSplitMenus();
+bool G_SplitMenuAllowsPause();

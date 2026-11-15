@@ -92,6 +92,10 @@ void G_BuildSplitscreenCmd(int pad, player_t* player, usercmd_t* cmd)
 	const uint16_t pressed = s.buttons & ~PrevButtons[pad];
 	PrevButtons[pad] = s.buttons;
 
+	// In a menu: the controller drives the menu instead (see g_splitmenu.cpp).
+	if (G_SplitMenuOpen(int(player - players)))
+		return;
+
 	const float lx = StickAxis(s.lx), ly = StickAxis(s.ly);
 	const float rx = StickAxis(s.rx), ry = StickAxis(s.ry);
 

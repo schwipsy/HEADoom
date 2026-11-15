@@ -382,6 +382,10 @@ bool EventManager::SendNetworkEvent(FString name, int arg1, int arg2, int arg3, 
 	if (gamestate != GS_LEVEL && gamestate != GS_TITLELEVEL)
 		return false;
 
+	// Sent from an extra splitscreen player's menu: apply it to that player.
+	if (G_QueueSplitMenuNetEvent(name, arg1, arg2, arg3, manual))
+		return true;
+
 	Net_WriteInt8(DEM_NETEVENT);
 	Net_WriteString(name.GetChars());
 	Net_WriteInt8(3);

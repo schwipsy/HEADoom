@@ -1085,7 +1085,9 @@ static void DrawRateStuff()
 static void DrawOverlays()
 {
 	C_DrawConsole ();
-	M_Drawer ();
+	// Splitscreen: a gameplay menu was already drawn inside its player's view.
+	if (!(gSplitFrame.count > 1 && G_IsGameplayMenu(CurrentMenu)))
+		M_Drawer ();
 	DrawRateStuff();
 	if (!hud_toggled)
 		FStat::PrintStat (twod);
@@ -1448,6 +1450,14 @@ void D_Display ()
 					StatusBar->SetScale();
 					gSplitFrame.current = v;
 					drawHud(gSplitFrame.sector[v], true);
+					// Gameplay menus (upgrade menus, ...) are drawn inside their player's view.
+					if (gSplitFrame.player[v] == restore.cp)
+					{
+						if (menuactive != MENU_Off && G_IsGameplayMenu(CurrentMenu))
+							CurrentMenu->CallDrawer();
+					}
+					else
+						G_DrawSplitMenu(gSplitFrame.player[v]);
 				}
 			}
 			else
@@ -1598,6 +1608,7 @@ void D_ErrorCleanup ()
 	Net_ClearBuffers ();
 	G_NewInit ();
 	M_ClearMenus ();
+	G_ClearSplitMenus();
 	playeringame[0] = 1;
 	players[0].playerstate = PST_LIVE;
 	gameaction = ga_fullconsole;
@@ -4494,6 +4505,7 @@ void D_Cleanup()
 	G_ClearMapinfo();
 
 	M_ClearMenus();					// close menu if open
+	G_ClearSplitMenus();
 	AM_ClearColorsets();
 	DeinitSWColorMaps();
 	FreeSBarInfoScript();

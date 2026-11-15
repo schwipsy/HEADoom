@@ -184,6 +184,7 @@ class Menu : Object native ui version("2.4")
 	native static int MenuTime();
 	native static Menu GetCurrentMenu();
 	native static clearscope void SetMenu(Name mnu, int param = 0);	// This is not 100% safe but needs to be available - but always make sure to check that only the desired player opens it!
+	native static void SetMenuForPlayer(Name mnu, int playernum);	// splitscreen: opens a gameplay menu for that local player (own instance for an extra player)
 	native static void StartMessage(String msg, int mode = 0, Name command = 'none');
 	native static void SetMouseCapture(bool on);
 	native void Close();

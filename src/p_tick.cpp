@@ -56,6 +56,7 @@ void P_RunClientSideLogic()
 {
 	C_Ticker();
 	M_Ticker();
+	G_SplitMenuTicker();
 
 	// [ZZ] also tick the UI part of the events
 	primaryLevel->localEventManager->UiTick();
@@ -115,7 +116,7 @@ bool P_CheckTickerPaused ()
 	// pause if in menu or console and at least one tic has been run
 	if ( !netgame
 		 && gamestate != GS_TITLELEVEL
-		 && ((menuactive != MENU_Off && menuactive != MENU_OnNoPause) ||
+		 && ((menuactive != MENU_Off && menuactive != MENU_OnNoPause && G_SplitMenuAllowsPause()) ||
 			 ConsoleState == c_down || ConsoleState == c_falling)
 		 && !demoplayback
 		 && !demorecording

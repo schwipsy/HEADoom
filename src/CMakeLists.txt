@@ -795,6 +795,7 @@ set (PCH_SOURCES
 	g_dumpinfo.cpp
 	g_game.cpp
 	g_splitscreen.cpp
+	g_splitmenu.cpp
 	g_hub.cpp
 	g_level.cpp
 	gameconfigfile.cpp
