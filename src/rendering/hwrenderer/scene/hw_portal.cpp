@@ -16,7 +16,9 @@
 */
 
 #include <algorithm>
+#include <map>
 #include "c_dispatch.h"
+#include "stats.h"
 #include "p_maputl.h"
 #include "hw_portal.h"
 #include "hw_clipper.h"
@@ -181,6 +183,101 @@ bool FPortalSceneState::RenderFirstSkyPortal(int recursion, HWDrawInfo *outer_di
 }
 
 
+//-----------------------------------------------------------------------------
+//
+// Portal occlusion queries
+//
+//-----------------------------------------------------------------------------
+
+CVAR(Bool, gl_portal_occlusion, true, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+
+struct PortalQuery
+{
+	unsigned query = 0;
+	int visible = -1;		// last known result: -1 unknown, 0 no pixels, 1 some pixels
+	bool pending = false;	// a query was issued and its result has not been read yet
+	unsigned lastFrame = 0;
+};
+
+// Keyed by portal source and view camera, so split views keep separate results.
+static std::map<std::pair<const void *, const void *>, PortalQuery> portalQueries;
+static FRenderState *portalQueryOwner;
+static unsigned portalQueryFrame;
+static bool portalQueriesUnsupported;
+static int portalsQueried, portalsSkipped;
+
+ADD_STAT(portalcull)
+{
+	FString out;
+	if (portalQueriesUnsupported) out = "Portal occlusion queries: not supported by this backend";
+	else out.Format("Portals queried: %d, skipped as hidden: %d", portalsQueried, portalsSkipped);
+	return out;
+}
+
+void FPortalSceneState::BeginMainView(FRenderState &state)
+{
+	occlusionMainView = true;
+	portalQueryFrame++;
+	portalsQueried = portalsSkipped = 0;
+	if (portalQueryOwner != &state)
+	{
+		// New render backend: the old ids belong to a context that is gone.
+		portalQueries.clear();
+		portalQueryOwner = &state;
+		portalQueriesUnsupported = false;
+	}
+	if ((portalQueryFrame & 63) == 0 || !gl_portal_occlusion)
+	{
+		for (auto it = portalQueries.begin(); it != portalQueries.end();)
+		{
+			if (!gl_portal_occlusion || portalQueryFrame - it->second.lastFrame > 300)
+			{
+				state.FreeOcclusionQuery(it->second.query);
+				it = portalQueries.erase(it);
+			}
+			else ++it;
+		}
+	}
+}
+
+// Returns true if the portal's contents can be skipped this frame.
+bool FPortalSceneState::CheckOcclusion(HWPortal *p, FRenderState &state, HWDrawInfo *outer_di)
+{
+	if (!gl_portal_occlusion || portalQueriesUnsupported || !occlusionMainView) return false;
+	if (outer_di->mCurrentPortal != nullptr || outer_di->Viewpoint.bDoOob) return false;
+	const int type = p->GetHWPortalType();
+	if (type == HWP_SKY || type == HWP_HORIZON) return false;
+
+	auto &e = portalQueries[{ p->GetSource(), outer_di->Viewpoint.camera }];
+	e.lastFrame = portalQueryFrame;
+	if (e.query == 0)
+	{
+		e.query = state.AllocOcclusionQuery();
+		if (e.query == 0)
+		{
+			portalQueriesUnsupported = true;
+			return false;
+		}
+	}
+	if (e.pending)
+	{
+		const int r = state.GetOcclusionQueryResult(e.query);
+		if (r >= 0)
+		{
+			e.visible = r;
+			e.pending = false;
+		}
+	}
+	if (!e.pending)
+	{
+		p->occlusionQuery = e.query;
+		e.pending = true;
+	}
+	portalsQueried++;
+	if (e.visible == 0) portalsSkipped++;
+	return e.visible == 0;
+}
+
 void FPortalSceneState::RenderPortal(HWPortal *p, FRenderState &state, bool usestencil, HWDrawInfo *outer_di)
 {
 	VSMatrix tempmatrix;
@@ -189,7 +286,11 @@ void FPortalSceneState::RenderPortal(HWPortal *p, FRenderState &state, bool uses
 		tempmatrix = outer_di->VPUniforms.mProjectionMatrix; // ensure perspective projection matrix for skies
 		outer_di->VPUniforms.mProjectionMatrix = outer_di->ProjectionMatrix2;
 	}
-	if (gl_portals) outer_di->RenderPortal(p, state, usestencil);
+	if (gl_portals)
+	{
+		const bool hidden = usestencil && CheckOcclusion(p, state, outer_di);
+		outer_di->RenderPortal(p, state, usestencil, hidden);
+	}
 	if (outer_di->Viewpoint.bDoOrtho && ((p->GetHWPortalType() == HWP_SKY) || (p->GetHWPortalType() == HWP_SKYBOX)))
 	{
 		outer_di->VPUniforms.mProjectionMatrix = tempmatrix;
@@ -298,7 +399,9 @@ void HWPortal::SetupStencil(HWDrawInfo *di, FRenderState &state, bool usestencil
 		{
 			state.SetDepthMask(false);							// don't write to Z-buffer!
 
+			if (occlusionQuery) state.BeginOcclusionQuery(occlusionQuery);
 			DrawPortalStencil(state, STP_Stencil);
+			if (occlusionQuery) state.EndOcclusionQuery();
 
 			// Clear Z-buffer
 			state.SetStencil(1, SOP_Keep); // draw sky into stencil. This stage doesn't modify the stencil.
@@ -320,7 +423,9 @@ void HWPortal::SetupStencil(HWDrawInfo *di, FRenderState &state, bool usestencil
 			// Note: We must draw the stencil with z-write enabled here because there is no second pass!
 
 			state.SetDepthMask(true);
+			if (occlusionQuery) state.BeginOcclusionQuery(occlusionQuery);
 			DrawPortalStencil(state, STP_AllInOne);
+			if (occlusionQuery) state.EndOcclusionQuery();
 			state.SetStencil(1, SOP_Keep); // draw sky into stencil. This stage doesn't modify the stencil.
 			state.EnableTexture(true);
 			state.SetColorMask(true);

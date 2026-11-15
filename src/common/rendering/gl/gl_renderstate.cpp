@@ -600,3 +600,48 @@ bool FGLRenderState::SetDepthClamp(bool on)
 }
 
 }
+
+//==========================================================================
+//
+// Occlusion queries (used to skip portals that showed no pixels last frame)
+//
+//==========================================================================
+
+namespace OpenGLRenderer
+{
+
+unsigned FGLRenderState::AllocOcclusionQuery()
+{
+	if (glGenQueries == nullptr) return 0;
+	GLuint id = 0;
+	glGenQueries(1, &id);
+	return id;
+}
+
+void FGLRenderState::FreeOcclusionQuery(unsigned id)
+{
+	if (id != 0) glDeleteQueries(1, &id);
+}
+
+void FGLRenderState::BeginOcclusionQuery(unsigned id)
+{
+	if (id != 0) glBeginQuery(GL_SAMPLES_PASSED, id);
+}
+
+void FGLRenderState::EndOcclusionQuery()
+{
+	glEndQuery(GL_SAMPLES_PASSED);
+}
+
+int FGLRenderState::GetOcclusionQueryResult(unsigned id)
+{
+	if (id == 0) return -1;
+	GLuint available = 0;
+	glGetQueryObjectuiv(id, GL_QUERY_RESULT_AVAILABLE, &available);
+	if (!available) return -1;
+	GLuint samples = 0;
+	glGetQueryObjectuiv(id, GL_QUERY_RESULT, &samples);
+	return samples > 0 ? 1 : 0;
+}
+
+}

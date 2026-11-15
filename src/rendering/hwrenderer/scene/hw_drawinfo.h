@@ -270,7 +270,7 @@ public:
 	void CreateScene(bool drawpsprites);
 	void RenderScene(FRenderState &state);
 	void RenderTranslucent(FRenderState &state);
-	void RenderPortal(HWPortal *p, FRenderState &state, bool usestencil);
+	void RenderPortal(HWPortal *p, FRenderState &state, bool usestencil, bool skipContents = false);
 	void EndDrawScene(sector_t * viewsector, FRenderState &state);
 	void DrawEndScene2D(sector_t * viewsector, FRenderState &state);
 	void Set3DViewport(FRenderState &state);

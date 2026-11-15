@@ -23,7 +23,8 @@ layout(location=2) out vec4 FragNormal;
 
 void main()
 {
-	FragColor = vec4(1.0, 1.0, 1.0, 0.0);
+	// Normally drawn with color writes off. Skipped portals use it to fill their area with the object color.
+	FragColor = vec4(uObjectColor.rgb, 1.0);
 #ifdef GBUFFER_PASS
 	FragFog = vec4(0.0, 0.0, 0.0, 1.0);
 	FragNormal = vec4(0.5, 0.5, 0.5, 1.0);

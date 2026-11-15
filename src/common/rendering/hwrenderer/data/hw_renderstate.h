@@ -737,6 +737,14 @@ public:
 
 	// API-dependent render interface
 
+	// Occlusion queries: count the pixels that pass the depth test between Begin and End.
+	// Backends without support hand out id 0, which means "no query".
+	virtual unsigned AllocOcclusionQuery() { return 0; }
+	virtual void FreeOcclusionQuery(unsigned id) {}
+	virtual void BeginOcclusionQuery(unsigned id) {}
+	virtual void EndOcclusionQuery() {}
+	virtual int GetOcclusionQueryResult(unsigned id) { return -1; }	// -1 = not ready, 0 = no pixels, 1 = some pixels
+
 	// Draw commands
 	virtual void ClearScreen() = 0;
 	virtual void Draw(int dt, int index, int count, bool apply = true) = 0;

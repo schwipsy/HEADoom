@@ -92,6 +92,7 @@ public:
 	TArray<HWWall> lines;
 	BoundingRect boundingBox;
 	int planesused = 0;
+	unsigned occlusionQuery = 0;	// when set, SetupStencil counts the portal's visible pixels into this query
 	float zshift = 0.1f; 	// HWPlaneMirrorPortal::DrawPortalStencil() z-fights with flats unless zshift >= 0.1
 	HWFlat flat;
 
@@ -143,6 +144,13 @@ struct FPortalSceneState
 	UniqueList<secplane_t> UniquePlaneMirrors;
 
 	int skyboxrecursion = 0;
+
+	// Occlusion queries for the main view's portals: a portal whose stencil
+	// showed no pixels last frame only gets its stencil drawn (for the next
+	// query), not its contents.
+	bool occlusionMainView = false;
+	void BeginMainView(FRenderState &state);
+	bool CheckOcclusion(HWPortal *p, FRenderState &state, HWDrawInfo *outer_di);
 
 	void BeginScene()
 	{

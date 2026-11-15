@@ -128,6 +128,11 @@ public:
 	void SetCulling(int mode) override;
 	void EnableClipDistance(int num, bool state) override;
 	void Clear(int targets) override;
+	unsigned AllocOcclusionQuery() override;
+	void FreeOcclusionQuery(unsigned id) override;
+	void BeginOcclusionQuery(unsigned id) override;
+	void EndOcclusionQuery() override;
+	int GetOcclusionQueryResult(unsigned id) override;
 	void EnableStencil(bool on) override;
 	void SetScissor(int x, int y, int w, int h) override;
 	void SetViewport(int x, int y, int w, int h) override;

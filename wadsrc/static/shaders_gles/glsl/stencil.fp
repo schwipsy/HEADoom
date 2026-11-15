@@ -17,5 +17,6 @@
 
 void main()
 {
-	gl_FragColor = vec4(1.0, 1.0, 1.0, 0.0);
+	// Normally drawn with color writes off. Skipped portals use it to fill their area with the object color.
+	gl_FragColor = vec4(uObjectColor.rgb, 1.0);
 }

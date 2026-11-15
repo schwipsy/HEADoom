@@ -732,3 +732,62 @@ void FGLRenderState::ApplyViewport(void* data)
 
 }
 }
+
+//==========================================================================
+//
+// Occlusion queries (used to skip portals that showed no pixels last frame)
+//
+//==========================================================================
+
+#if !USE_GLAD_LOADER
+namespace OpenGLESRenderer
+{
+
+unsigned FGLRenderState::AllocOcclusionQuery()
+{
+	// Real OpenGL ES 2 has no occlusion queries.
+	if (gles.glesMode == GLES_MODE_GLES) return 0;
+	if (glGenQueries == nullptr) return 0;
+	GLuint id = 0;
+	glGenQueries(1, &id);
+	return id;
+}
+
+void FGLRenderState::FreeOcclusionQuery(unsigned id)
+{
+	if (id != 0) glDeleteQueries(1, &id);
+}
+
+void FGLRenderState::BeginOcclusionQuery(unsigned id)
+{
+	if (id != 0) glBeginQuery(GL_SAMPLES_PASSED, id);
+}
+
+void FGLRenderState::EndOcclusionQuery()
+{
+	glEndQuery(GL_SAMPLES_PASSED);
+}
+
+int FGLRenderState::GetOcclusionQueryResult(unsigned id)
+{
+	if (id == 0) return -1;
+	GLuint available = 0;
+	glGetQueryObjectuiv(id, GL_QUERY_RESULT_AVAILABLE, &available);
+	if (!available) return -1;
+	GLuint samples = 0;
+	glGetQueryObjectuiv(id, GL_QUERY_RESULT, &samples);
+	return samples > 0 ? 1 : 0;
+}
+
+}
+#else
+namespace OpenGLESRenderer
+{
+// The GLES loader does not provide query functions.
+unsigned FGLRenderState::AllocOcclusionQuery() { return 0; }
+void FGLRenderState::FreeOcclusionQuery(unsigned id) {}
+void FGLRenderState::BeginOcclusionQuery(unsigned id) {}
+void FGLRenderState::EndOcclusionQuery() {}
+int FGLRenderState::GetOcclusionQueryResult(unsigned id) { return -1; }
+}
+#endif

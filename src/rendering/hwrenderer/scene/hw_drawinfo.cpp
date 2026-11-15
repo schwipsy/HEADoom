@@ -610,17 +610,40 @@ void HWDrawInfo::RenderTranslucent(FRenderState &state)
 //
 //-----------------------------------------------------------------------------
 
-void HWDrawInfo::RenderPortal(HWPortal *p, FRenderState &state, bool usestencil)
+void HWDrawInfo::RenderPortal(HWPortal *p, FRenderState &state, bool usestencil, bool skipContents)
 {
 	auto gp = static_cast<HWPortal *>(p);
 	gp->SetupStencil(this, state, usestencil);
-	auto new_di = StartDrawInfo(this->Level, this, Viewpoint, &VPUniforms);
-	new_di->mCurrentPortal = gp;
-	state.SetLightIndex(-1);
-	gp->DrawContents(new_di, state);
-	new_di->EndDrawInfo();
-	state.SetVertexBuffer(screen->mVertexData);
-	screen->mViewpoints->Bind(state, vpIndex);
+	gp->occlusionQuery = 0;
+	if (!skipContents)
+	{
+		auto new_di = StartDrawInfo(this->Level, this, Viewpoint, &VPUniforms);
+		new_di->mCurrentPortal = gp;
+		state.SetLightIndex(-1);
+		gp->DrawContents(new_di, state);
+		new_di->EndDrawInfo();
+		state.SetVertexBuffer(screen->mVertexData);
+		screen->mViewpoints->Bind(state, vpIndex);
+	}
+	else if (usestencil)
+	{
+		// Fill the hidden portal with the fog color around the camera, so a portal
+		// that comes back into view shows fog for one frame instead of garbage.
+		PalEntry fill = Viewpoint.sector ? Viewpoint.sector->Colormap.FadeColor : PalEntry(0);
+		if ((fill.d & 0xffffff) == 0) fill = Level->fadeto;
+		fill.a = 255;
+		state.SetEffect(EFF_STENCIL);
+		state.EnableTexture(false);
+		state.SetObjectColor(fill);
+		state.SetDepthMask(false);
+		state.SetDepthFunc(DF_Always);
+		gp->DrawPortalStencil(state, 0);	// STP_Stencil: just the portal's surface
+		state.SetObjectColor(0xffffffff);
+		state.SetEffect(EFF_NONE);
+		state.EnableTexture(true);
+		state.SetDepthFunc(DF_Less);
+		state.SetDepthMask(gp->NeedDepthBuffer());
+	}
 	gp->RemoveStencil(this, state, usestencil);
 
 }
@@ -1013,6 +1036,7 @@ void HWDrawInfo::DrawScene(int drawmode)
 	bool applySSAO = false;
 	if (drawmode == DM_MAINVIEW)
 	{
+		portalState.BeginMainView(*screen->RenderState());
 		ssao_portals_available = gl_ssao_portals;
 		applySSAO = true;
 		if (r_dithertransparency && vp.bDoOob)
@@ -1022,6 +1046,7 @@ void HWDrawInfo::DrawScene(int drawmode)
 	}
 	else if (drawmode == DM_OFFSCREEN)
 	{
+		portalState.occlusionMainView = false;
 		ssao_portals_available = 0;
 	}
 	else if (drawmode == DM_PORTAL && ssao_portals_available > 0)
