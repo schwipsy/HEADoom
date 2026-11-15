@@ -372,6 +372,7 @@ void FreeSBarInfoScript();
 void I_UpdateWindowTitle();
 void S_ParseMusInfo();
 void D_GrabCVarDefaults();
+void SyncModDecalLimit();
 void LoadHexFont(const char* filename);
 void InitBuildTiles();
 bool OkForLocalization(FTextureID texnum, const char* substitute);
@@ -3743,6 +3744,7 @@ static int D_InitGame(const FIWADInfo* iwad_info, std::vector<FileSys::ResourceN
 
 	// Now that wads are loaded, define mod-specific cvars.
 	ParseCVarInfo();
+	SyncModDecalLimit();
 
 	// Actually exec command line commands and exec files.
 	if (exec != NULL)

@@ -20,8 +20,8 @@
 ** exact block of screen pixels; the dither runs after the upscale, so its
 ** pattern keeps its size at every scale.
 **
-** Settings that belong to a mod (blood decals, destruction quality) are only
-** set when that mod is loaded.
+** Settings that belong to a mod (destruction quality) are only set when that
+** mod is loaded. The blood decal limit follows cl_maxdecals (see g_cvars.cpp).
 **
 */
 
@@ -64,9 +64,8 @@ static const FPresetSetting PresetSettings[] =
 	{ "gl_texture_filter_anisotropic",	{ "2", "4", "8", "16", "16" } },
 
 	// Decals and particles
-	{ "cl_maxdecals",					{ "1000", "2500", "5000", "10000", "25000" } },
-	{ "r_maxparticles",					{ "1250", "2500", "5000", "7500", "12500" } },
-	{ "ug_decal_max",					{ "500", "1500", "5000", "9000", "15000" } },
+	{ "cl_maxdecals",					{ "1000", "2500", "5000", "7500", "10000" } },
+	{ "r_maxparticles",					{ "1250", "2500", "5000", "7500", "10000" } },
 
 	// Destruction effect quality
 	{ "dissolve_canvas_quality",		{ "10", "10", "20", "20", "20" } },

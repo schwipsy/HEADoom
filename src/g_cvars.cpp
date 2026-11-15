@@ -87,8 +87,29 @@ CUSTOM_CVAR(Int, sv_corpsequeuesize, 64, CVAR_ARCHIVE|CVAR_SERVERINFO|CVAR_NOINI
 	}
 }
 
+//==========================================================================
+//
+// The Gore mod's blood decal limit (ug_decal_max) is always half of
+// cl_maxdecals. Called when cl_maxdecals changes and once the mod's cvars
+// exist at startup; does nothing if the mod is not loaded.
+//
+//==========================================================================
+
+EXTERN_CVAR(Int, cl_maxdecals)
+
+void SyncModDecalLimit()
+{
+	FBaseCVar *cvar = FindCVar("ug_decal_max", nullptr);
+	if (cvar == nullptr)
+		return;
+	UCVarValue value;
+	value.Int = max(0, *cl_maxdecals / 2);
+	cvar->SetGenericRep(value, CVAR_Int);
+}
+
 CUSTOM_CVAR (Int, cl_maxdecals, 5000, CVAR_ARCHIVE|CVAR_NOINITCALL)
 {
+	SyncModDecalLimit();
 	if (self < 0)
 	{
 		self = 0;
