@@ -20,6 +20,8 @@
 #include "b_bot.h"
 #include "i_splitpad.h"
 #include "g_splitscreen.h"
+#include "d_eventbase.h"
+#include "vm.h"
 #include "printf.h"
 #include "d_protocol.h"
 #include "d_event.h"
@@ -363,4 +365,27 @@ CCMD(splitscreen_leave)
 CCMD(splitscreen_debugadd)
 {
 	QueueSplitscreenRequest(argv.argc() > 1 ? atoi(argv[1]) - 1 : 3, false, true);
+}
+
+//==========================================================================
+//
+// Whether a player is currently playing with a controller: splitscreen
+// players always are, player 1 is when their last key press came from one.
+// This is local input state, so it must not drive game logic in netgames.
+//
+//==========================================================================
+
+bool G_PlayerUsesGamepad(int pnum)
+{
+	if (pnum < 0 || pnum >= MAXPLAYERS || !playeringame[pnum])
+		return false;
+	if (players[pnum].Bot != nullptr)
+		return players[pnum].Bot->LocalPad >= 0;
+	return pnum == consoleplayer && I_LastInputWasGamepad;
+}
+
+DEFINE_ACTION_FUNCTION(_PlayerInfo, UsingGamepad)
+{
+	PARAM_SELF_STRUCT_PROLOGUE(player_t);
+	ACTION_RETURN_BOOL(G_PlayerUsesGamepad(int(self - players)));
 }

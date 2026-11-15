@@ -62,6 +62,10 @@ struct mousestate_t
 
 // Called by IO functions when input is detected.
 void D_PostEvent (event_t* ev);
+
+// True when player 1's last key press came from a controller, false after a
+// keyboard key. Mouse input does not change it.
+extern bool I_LastInputWasGamepad;
 void D_RemoveNextCharEvent();
 void D_ProcessEvents(void);
 void PostMouseMove(int x, int y);

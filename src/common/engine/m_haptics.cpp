@@ -23,6 +23,7 @@
 #include "doomdef.h"
 #include "doomstat.h"
 #include "m_haptics.h"
+#include "d_eventbase.h"
 #include "name.h"
 #include "printf.h"
 #include "s_soundinternal.h"
@@ -442,6 +443,16 @@ void Joy_RumbleTick()
 {
 	if (!Haptics.enabled) return;
 
+	// No rumble while the player is using the keyboard (a connected but unused
+	// controller would otherwise vibrate). Re-applies when they pick it up again.
+	static bool lastWasGamepad = true;
+	if (lastWasGamepad != I_LastInputWasGamepad)
+	{
+		lastWasGamepad = I_LastInputWasGamepad;
+		if (!lastWasGamepad) I_Rumble(0, 0, 0, 0);
+		Haptics.dirty = true;
+	}
+
 	// pause detection
 	if (AppActive != Haptics.active)
 	{
@@ -516,12 +527,19 @@ void Joy_RumbleTick()
 	// Haptics.current.left_trigger = std::min(std::max(0.0, Haptics.current.left_trigger), 1.0);
 	// Haptics.current.right_trigger = std::min(std::max(0.0, Haptics.current.right_trigger), 1.0);
 
-	I_Rumble(
-		Haptics.current.high_frequency,
-		Haptics.current.low_frequency,
-		Haptics.current.left_trigger,
-		Haptics.current.right_trigger
-	);
+	if (I_LastInputWasGamepad)
+	{
+		I_Rumble(
+			Haptics.current.high_frequency,
+			Haptics.current.low_frequency,
+			Haptics.current.left_trigger,
+			Haptics.current.right_trigger
+		);
+	}
+	else
+	{
+		I_Rumble(0, 0, 0, 0);
+	}
 
 	Haptics.dirty = false;
 }

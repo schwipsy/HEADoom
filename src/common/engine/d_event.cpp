@@ -156,8 +156,18 @@ void D_RemoveNextCharEvent()
 //
 //==========================================================================
 
+bool I_LastInputWasGamepad = false;
+
 void D_PostEvent(event_t* ev)
 {
+	if (ev->type == EV_KeyDown)
+	{
+		const int key = ev->data1;
+		if (key < KEY_FIRSTMOUSEBUTTON)
+			I_LastInputWasGamepad = false;
+		else if ((key >= KEY_FIRSTJOYBUTTON && key < KEY_MWHEELUP) || (key >= KEY_JOYAXIS1PLUS && key < NUM_KEYS))
+			I_LastInputWasGamepad = true;
+	}
 	// Do not post duplicate consecutive EV_DeviceChange events.
 	if (ev->type == EV_DeviceChange && events[eventhead].type == EV_DeviceChange)
 	{

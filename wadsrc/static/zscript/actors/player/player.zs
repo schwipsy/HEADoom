@@ -3032,6 +3032,9 @@ struct PlayerInfo native play	// self is what internally is known as player_t
 		if (mo) mo.BringUpWeapon();
 	}
 
+	// True while this player plays with a controller (local input state; see g_splitscreen.cpp).
+	native clearscope bool UsingGamepad() const;
+
 	clearscope bool IsTotallyFrozen() const
 	{
 		return
