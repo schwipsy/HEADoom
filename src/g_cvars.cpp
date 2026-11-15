@@ -87,7 +87,7 @@ CUSTOM_CVAR(Int, sv_corpsequeuesize, 64, CVAR_ARCHIVE|CVAR_SERVERINFO|CVAR_NOINI
 	}
 }
 
-CUSTOM_CVAR (Int, cl_maxdecals, 2000, CVAR_ARCHIVE|CVAR_NOINITCALL)
+CUSTOM_CVAR (Int, cl_maxdecals, 5000, CVAR_ARCHIVE|CVAR_NOINITCALL)
 {
 	if (self < 0)
 	{
@@ -110,10 +110,10 @@ CUSTOM_CVAR (Int, cl_maxdecals, 2000, CVAR_ARCHIVE|CVAR_NOINITCALL)
 
 // [BC] Allow the maximum number of particles to be specified by a cvar (so people
 // with lots of nice hardware can have lots of particles!).
-CUSTOM_CVAR(Int, r_maxparticles, 4000, CVAR_ARCHIVE | CVAR_NOINITCALL)
+CUSTOM_CVAR(Int, r_maxparticles, 5000, CVAR_ARCHIVE | CVAR_NOINITCALL)
 {
 	if (self == 0)
-		self = 4000;
+		self = 5000;
 	else if (self > 65535)
 		self = 65535;
 	else if (self < 100)

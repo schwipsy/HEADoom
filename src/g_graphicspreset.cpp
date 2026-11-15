@@ -64,9 +64,9 @@ static const FPresetSetting PresetSettings[] =
 	{ "gl_texture_filter_anisotropic",	{ "2", "4", "8", "16", "16" } },
 
 	// Decals and particles
-	{ "cl_maxdecals",					{ "400", "1000", "2000", "4000", "9999" } },
-	{ "r_maxparticles",					{ "1000", "2000", "4000", "6000", "10000" } },
-	{ "ug_decal_max",					{ "100", "300", "1000", "1800", "3000" } },
+	{ "cl_maxdecals",					{ "1000", "2500", "5000", "10000", "25000" } },
+	{ "r_maxparticles",					{ "1250", "2500", "5000", "7500", "12500" } },
+	{ "ug_decal_max",					{ "500", "1500", "5000", "9000", "15000" } },
 
 	// Destruction effect quality
 	{ "dissolve_canvas_quality",		{ "10", "10", "20", "20", "20" } },
