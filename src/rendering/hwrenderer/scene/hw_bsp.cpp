@@ -55,7 +55,7 @@ EXTERN_CVAR(Bool, r_dithertransparency)
 // with +CUSTOMLOD.
 CVAR(Bool, gl_autolod, true, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 CVAR(Float, gl_autolod_factor, 25.f, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
-CVAR(Float, gl_autolod_min, 256.f, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+CVAR(Float, gl_autolod_min, 600.f, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 CVAR(Float, gl_autolod_max, 3000.f, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 
 // Skip things whose whole outline is already covered by solid walls nearer to the view.
