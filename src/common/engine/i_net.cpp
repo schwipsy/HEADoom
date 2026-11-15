@@ -50,6 +50,7 @@
 #include "engineerrors.h"
 #include "i_interface.h"
 #include "i_net.h"
+#include "i_steamnet.h"
 #include "m_argv.h"
 #include "m_crc32.h"
 #include "m_random.h"
@@ -516,7 +517,10 @@ static void SendPacket(const sockaddr_in& to)
 	TransmitBuffer[2] = crc >> 8;
 	TransmitBuffer[3] = crc;
 
-	sendto(MySocket, (const char*)TransmitBuffer, size + 4, 0, (const sockaddr*)&to, sizeof(to));
+	if (SteamNet_Active())
+		SteamNet_Send(to, TransmitBuffer, size + 4);
+	else
+		sendto(MySocket, (const char*)TransmitBuffer, size + 4, 0, (const sockaddr*)&to, sizeof(to));
 }
 
 static void GetPacket(sockaddr_in* const from = nullptr)
@@ -524,8 +528,26 @@ static void GetPacket(sockaddr_in* const from = nullptr)
 	sockaddr_in fromAddress;
 	socklen_t fromSize = sizeof(fromAddress);
 
-	int msgSize = recvfrom(MySocket, (char *)TransmitBuffer, MaxTransmitSize, 0,
-				  (sockaddr *)&fromAddress, &fromSize);
+	int msgSize;
+	if (SteamNet_Active())
+	{
+		fromAddress = {};
+		msgSize = SteamNet_Recv(&fromAddress, TransmitBuffer, MaxTransmitSize);
+		if (msgSize < 0)
+		{
+#ifdef _WIN32
+			WSASetLastError(WSAEWOULDBLOCK);
+#else
+			errno = EWOULDBLOCK;
+#endif
+			msgSize = SOCKET_ERROR;
+		}
+	}
+	else
+	{
+		msgSize = recvfrom(MySocket, (char *)TransmitBuffer, MaxTransmitSize, 0,
+					  (sockaddr *)&fromAddress, &fromSize);
+	}
 
 	int client = FindClient(fromAddress);
 	if (client >= 0 && msgSize == SOCKET_ERROR)

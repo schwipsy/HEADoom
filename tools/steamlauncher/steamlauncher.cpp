@@ -21,10 +21,17 @@
 //     READY <0|1> <persona>    1 = Steam is up, 0 = offline (commands ignored)
 //     OVERLAY <0|1>            Steam overlay opened / closed (pause the game)
 //     STAT <api_name> <int>    reply to GETSTAT
+//     NETADDR <ip:port>        our online address (Steam FakeIP) when playing online
 //     ERR <text>               bad command
+//
+// Online play (see netrelay.h):
+//   --host <players>           host a game; the game gets -host <players>
+//   --join <ip:port>           join the host's online address
+//   --net-local <port>         test transport: plain UDP on 127.0.0.1:<port>
+//   --log <file>               log file name (default steamlauncher.log)
 
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
+#include "netrelay.h"
+#include <mmsystem.h>
 #include <shellapi.h>
 #include <share.h>
 #include <string>
@@ -151,6 +158,7 @@ public:
 
 static Pipe gPipe;
 static bool gSteam = false;
+static Transport *gNet = nullptr;
 
 // Steam callbacks need an object; this one only relays overlay state.
 class SteamEvents
@@ -186,6 +194,7 @@ static void Handle(const std::string &line, bool &quit)
 		std::string persona = gSteam ? SteamFriends()->GetPersonaName() : "";
 		for (char &ch : persona) if (ch == '\n' || ch == '\r') ch = ' ';
 		gPipe.Send(std::string("READY ") + (gSteam ? "1 " : "0 ") + persona);
+		if (gNet && gNet->Ready()) gPipe.Send("NETADDR " + gNet->Address());
 		return;
 	}
 	if (c == "QUIT") { quit = true; return; }
@@ -225,10 +234,30 @@ static void Handle(const std::string &line, bool &quit)
 
 // ---------------------------------------------------------------------------
 
+static std::wstring Widen(const std::string &s) { return std::wstring(s.begin(), s.end()); }
+
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, LPWSTR, int)
 {
 	std::wstring dir = ExeDir();
-	gLog = _wfsopen((dir + L"\\steamlauncher.log").c_str(), L"w", _SH_DENYNO);
+
+	// Our options; everything else is passed through to the game.
+	int argc = 0;
+	LPWSTR *argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+	std::wstring game = dir + L"\\HEADCUTTER.exe";
+	std::wstring args, logName = L"steamlauncher.log", hostCount, joinAddr;
+	int netLocalPort = 0;
+	for (int i = 1; i < argc; i++)
+	{
+		if (!wcscmp(argv[i], L"--game") && i + 1 < argc) { game = argv[++i]; continue; }
+		if (!wcscmp(argv[i], L"--log") && i + 1 < argc) { logName = argv[++i]; continue; }
+		if (!wcscmp(argv[i], L"--host") && i + 1 < argc) { hostCount = argv[++i]; continue; }
+		if (!wcscmp(argv[i], L"--join") && i + 1 < argc) { joinAddr = argv[++i]; continue; }
+		if (!wcscmp(argv[i], L"--net-local") && i + 1 < argc) { netLocalPort = _wtoi(argv[++i]); continue; }
+		args += L" " + Quote(argv[i]);
+	}
+	LocalFree(argv);
+	gLog = _wfsopen((dir + L"\\" + logName).c_str(), L"w", _SH_DENYNO);
+	bool online = !hostCount.empty() || !joinAddr.empty();
 
 #if HC_STEAM_APPID != 0
 	if (SteamAPI_RestartAppIfNecessary(HC_STEAM_APPID)) return 0; // Steam relaunches us
@@ -239,23 +268,53 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, LPWSTR, int)
 	Log("steam: %s %s", gSteam ? "ok" : "offline", gSteam ? "" : err);
 	SteamEvents *events = gSteam ? new SteamEvents : nullptr;
 
-	// Game exe and its arguments: --game <exe> overrides the default, the
-	// rest of our command line is passed through unchanged.
-	int argc = 0;
-	LPWSTR *argv = CommandLineToArgvW(GetCommandLineW(), &argc);
-	std::wstring game = dir + L"\\HEADCUTTER.exe";
-	std::wstring args;
-	for (int i = 1; i < argc; i++)
+	// Online play: get our address before the game starts, since the game
+	// needs a working transport from its first packet.
+	if (online)
 	{
-		if (!wcscmp(argv[i], L"--game") && i + 1 < argc) { game = argv[++i]; continue; }
-		args += L" " + Quote(argv[i]);
+		if (netLocalPort > 0)
+			gNet = new UdpTransport((uint16_t)netLocalPort);
+		else if (gSteam)
+		{
+			auto st = new SteamTransport;
+			gNet = st;
+			for (int t = 0; t < 1500 && !st->Ready() && !st->Failed(); t++) { SteamAPI_RunCallbacks(); Sleep(10); }
+		}
+		if (!gNet || !gNet->Ready())
+		{
+			std::string why = !gSteam && netLocalPort == 0 ? "Steam is not running." : gNet ? gNet->Error() : "";
+			Log("net: unavailable %s", why.c_str());
+			MessageBoxW(nullptr, (L"Online play is not available.\n" + Widen(why)).c_str(), L"Headcutter", MB_ICONERROR);
+			if (gSteam) SteamAPI_Shutdown();
+			return 1;
+		}
+		Log("net: address %s", gNet->Address().c_str());
+		if (!hostCount.empty())
+		{
+			args += L" -host " + hostCount;
+			if (gSteam)
+			{
+				SteamFriends()->SetRichPresence("status", "Hosting a game");
+				SteamFriends()->SetRichPresence("connect", ("--join " + gNet->Address()).c_str());
+			}
+		}
+		else
+			args += L" -join " + joinAddr;
 	}
-	LocalFree(argv);
 
 	wchar_t pipeName[96];
 	swprintf_s(pipeName, L"\\\\.\\pipe\\headcutter_steam_%lu", GetCurrentProcessId());
 	if (!gPipe.Create(pipeName)) Log("pipe: create failed %lu", GetLastError());
 	SetEnvironmentVariableW(L"HEADCUTTER_STEAM_PIPE", pipeName);
+
+	PacketPipe netPipe;
+	if (online)
+	{
+		wchar_t netName[96];
+		swprintf_s(netName, L"\\\\.\\pipe\\headcutter_steamnet_%lu", GetCurrentProcessId());
+		if (!netPipe.Create(netName)) Log("netpipe: create failed %lu", GetLastError());
+		SetEnvironmentVariableW(L"HEADCUTTER_STEAM_NETPIPE", netName);
+	}
 
 	std::wstring cmdline = Quote(game) + args;
 	STARTUPINFOW si = { sizeof(si) };
@@ -269,21 +328,44 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, LPWSTR, int)
 	CloseHandle(pi.hThread);
 	Log("game started, pid %lu", pi.dwProcessId);
 
-	bool quit = false;
+	// Online play needs low latency, so poll every millisecond then.
+	if (online) timeBeginPeriod(1);
+	std::vector<uint8_t> pkt(65536);
+	unsigned long long sent = 0, recvd = 0;
+	bool quit = false, pipeOpen = true;
 	while (!quit)
 	{
-		if (WaitForSingleObject(pi.hProcess, 33) == WAIT_OBJECT_0) break;
+		if (WaitForSingleObject(pi.hProcess, online ? 1 : 33) == WAIT_OBJECT_0) break;
 		if (gSteam) SteamAPI_RunCallbacks();
-		gPipe.PollConnect();
-		std::vector<std::string> lines;
-		if (!gPipe.ReadLines(lines)) { Log("pipe closed"); WaitForSingleObject(pi.hProcess, INFINITE); break; }
-		for (auto &l : lines) Handle(l, quit);
+		if (gNet)
+		{
+			uint32_t ip; uint16_t port; const uint8_t *data; int n;
+			while ((n = netPipe.Read(ip, port, data)) >= 0)
+				if (n > 0) { gNet->Send(ip, port, data, n); sent++; }
+			while ((n = gNet->Recv(ip, port, pkt.data(), (int)pkt.size())) >= 0)
+				if (n > 0) { netPipe.Write(ip, port, pkt.data(), n); recvd++; }
+		}
+		if (pipeOpen)
+		{
+			gPipe.PollConnect();
+			std::vector<std::string> lines;
+			if (!gPipe.ReadLines(lines)) { Log("pipe closed"); pipeOpen = false; if (!gNet) { WaitForSingleObject(pi.hProcess, INFINITE); break; } }
+			for (auto &l : lines) Handle(l, quit);
+		}
+	}
+	if (online)
+	{
+		timeEndPeriod(1);
+		Log("net: %llu packets sent, %llu received", sent, recvd);
+		if (gSteam) SteamFriends()->ClearRichPresence();
 	}
 
 	DWORD code = 0;
 	WaitForSingleObject(pi.hProcess, 5000);
 	GetExitCodeProcess(pi.hProcess, &code);
 	CloseHandle(pi.hProcess);
+	delete gNet;
+	gNet = nullptr;
 	if (gSteam)
 	{
 		SteamUserStats()->StoreStats();

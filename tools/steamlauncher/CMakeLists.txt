@@ -12,7 +12,7 @@ set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
 add_executable(HeadcutterSteam WIN32 steamlauncher.cpp)
 target_include_directories(HeadcutterSteam PRIVATE "${STEAMWORKS_SDK}/public")
-target_link_libraries(HeadcutterSteam PRIVATE "${STEAMWORKS_SDK}/redistributable_bin/win64/steam_api64.lib")
+target_link_libraries(HeadcutterSteam PRIVATE "${STEAMWORKS_SDK}/redistributable_bin/win64/steam_api64.lib" ws2_32 winmm)
 target_compile_definitions(HeadcutterSteam PRIVATE HC_STEAM_APPID=${HC_STEAM_APPID} UNICODE _UNICODE)
 if(HC_ALLOW_CLEAR)
 	target_compile_definitions(HeadcutterSteam PRIVATE HC_ALLOW_CLEAR)

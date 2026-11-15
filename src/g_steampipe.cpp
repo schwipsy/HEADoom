@@ -20,14 +20,17 @@
 #include "vm.h"
 #include "printf.h"
 #include "g_steampipe.h"
+#include "i_steamnet.h"
 
 CVAR(Bool, steam_overlaypause, true, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 
 static bool SteamOnline;
 static FString SteamPersona;
+static FString SteamNetAddress; // our FakeIP:port while hosting/joining over Steam
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
+#include <winsock2.h>
 #include <windows.h>
 
 static HANDLE Pipe = INVALID_HANDLE_VALUE;
@@ -67,6 +70,11 @@ static void OnLine(const FString &line)
 			M_StartControlPanel(false);
 			M_SetMenu(NAME_MainMenu);
 		}
+	}
+	else if (line.IndexOf("NETADDR ") == 0)
+	{
+		SteamNetAddress = line.Mid(8);
+		Printf("Steam online address: %s\n", SteamNetAddress.GetChars());
 	}
 	else if (line.IndexOf("ERR ") == 0)
 	{
@@ -115,10 +123,75 @@ void SteamPipe_Poll()
 	}
 }
 
+//==========================================================================
+//
+// Packet pipe (message mode): each message is 4 bytes IPv4 + 2 bytes port,
+// both in network order, followed by the packet.
+//
+//==========================================================================
+
+static HANDLE NetPipe = INVALID_HANDLE_VALUE;
+static bool NetTried;
+
+bool SteamNet_Active()
+{
+	if (!NetTried)
+	{
+		NetTried = true;
+		const char *name = getenv("HEADCUTTER_STEAM_NETPIPE");
+		if (name != nullptr && strncmp(name, "\\\\.\\pipe\\", 9) == 0)
+		{
+			NetPipe = CreateFileA(name, GENERIC_READ | GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, 0, nullptr);
+			if (NetPipe != INVALID_HANDLE_VALUE)
+			{
+				DWORD mode = PIPE_READMODE_MESSAGE;
+				SetNamedPipeHandleState(NetPipe, &mode, nullptr, nullptr);
+				Printf("Network play goes through Steam.\n");
+			}
+		}
+	}
+	return NetPipe != INVALID_HANDLE_VALUE;
+}
+
+static uint8_t NetFrame[6 + 65536];
+
+void SteamNet_Send(const sockaddr_in &to, const void *data, int len)
+{
+	if (NetPipe == INVALID_HANDLE_VALUE || len < 0 || len > 65536) return;
+	memcpy(&NetFrame[0], &to.sin_addr, 4);
+	memcpy(&NetFrame[4], &to.sin_port, 2);
+	memcpy(&NetFrame[6], data, len);
+	DWORD w = 0;
+	if (!WriteFile(NetPipe, NetFrame, 6 + len, &w, nullptr))
+		I_Error("Lost the connection to the Steam launcher");
+}
+
+int SteamNet_Recv(sockaddr_in *from, void *buf, int maxlen)
+{
+	if (NetPipe == INVALID_HANDLE_VALUE) return -1;
+	DWORD avail = 0;
+	if (!PeekNamedPipe(NetPipe, nullptr, 0, nullptr, &avail, nullptr))
+		I_Error("Lost the connection to the Steam launcher");
+	if (avail == 0) return -1;
+	DWORD got = 0;
+	if (!ReadFile(NetPipe, NetFrame, sizeof(NetFrame), &got, nullptr) || got < 6)
+		return -1;
+	int len = int(got) - 6;
+	if (len > maxlen) return -1;
+	from->sin_family = AF_INET;
+	memcpy(&from->sin_addr, &NetFrame[0], 4);
+	memcpy(&from->sin_port, &NetFrame[4], 2);
+	memcpy(buf, &NetFrame[6], len);
+	return len;
+}
+
 #else
 
 void SteamPipe_Poll() {}
 static void SendLine(const FString &) {}
+bool SteamNet_Active() { return false; }
+void SteamNet_Send(const sockaddr_in &, const void *, int) {}
+int SteamNet_Recv(sockaddr_in *, void *, int) { return -1; }
 
 #endif
 
@@ -189,7 +262,9 @@ CCMD(steam_store)
 
 CCMD(steam_status)
 {
-	Printf("Steam: %s%s%s\n", SteamOnline ? "online as " : "offline", SteamPersona.GetChars(), "");
+	Printf("Steam: %s%s\n", SteamOnline ? "online as " : "offline", SteamPersona.GetChars());
+	if (SteamNetAddress.Len() > 0)
+		Printf("Steam online address: %s\n", SteamNetAddress.GetChars());
 }
 
 //==========================================================================
