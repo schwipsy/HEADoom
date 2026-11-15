@@ -202,6 +202,21 @@ static const uint8_t renderwalltotier[] =
 CVAR(Bool, hw_npottest, false, 0)
 #endif
 
+// Mirrors farther than this from the view are drawn as plain walls. 0 = no limit.
+CVAR(Float, gl_mirror_maxdist, 1000.f, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+
+static bool MirrorInRange(const seg_t *seg, const DVector3 &viewpos)
+{
+	const double maxdist = gl_mirror_maxdist;
+	if (maxdist <= 0) return true;
+	const DVector2 a = seg->v1->fPos(), b = seg->v2->fPos(), p = viewpos.XY();
+	const DVector2 ab = b - a;
+	const double len2 = ab.LengthSquared();
+	double t = len2 > 0 ? (p - a) | ab / len2 : 0;
+	t = clamp(t, 0., 1.);
+	return (a + ab * t - p).LengthSquared() <= maxdist * maxdist;
+}
+
 void HWWall::RenderTexturedWall(HWWallDispatcher*di, FRenderState &state, int rflags)
 {
 	int tmode = state.GetTextureMode();
@@ -1383,7 +1398,7 @@ void HWWall::DoTexture(HWWallDispatcher *di, int _type,seg_t * seg, int peg,
 	if (!SetWallCoordinates(seg, &tci, floatceilingref, topleft, topright, bottomleft, bottomright,
 							seg->sidedef->GetTextureXOffset(texpos), skew)) return;
 
-	if (seg->linedef->special == Line_Mirror && _type == RENDERWALL_M1S && gl_mirrors && !(di->Level->ib_compatflags & BCOMPATF_NOMIRRORS))
+	if (seg->linedef->special == Line_Mirror && _type == RENDERWALL_M1S && gl_mirrors && !(di->Level->ib_compatflags & BCOMPATF_NOMIRRORS) && (di->di == nullptr || MirrorInRange(seg, di->di->Viewpoint.Pos)))
 	{
 		PutPortal(di, PORTALTYPE_MIRROR, -1);
 	}

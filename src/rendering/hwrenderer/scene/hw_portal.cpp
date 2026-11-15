@@ -15,6 +15,7 @@
 **
 */
 
+#include <algorithm>
 #include "c_dispatch.h"
 #include "p_maputl.h"
 #include "hw_portal.h"
@@ -64,6 +65,10 @@ CCMD(gl_portalinfo)
 static FString indent;
 FPortalSceneState portalState;
 
+// Inside a mirror's reflection only this many portals get rendered (the ones
+// with the most lines). Skies and horizons don't count. 0 = no limit.
+CVAR(Int, gl_mirror_maxportals, 2, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+
 //-----------------------------------------------------------------------------
 //
 // EndFrame
@@ -78,6 +83,27 @@ void FPortalSceneState::EndFrame(HWDrawInfo *di, FRenderState &state)
 	{
 		Printf("%s%d portals, depth = %d\n%s{\n", indent.GetChars(), di->Portals.Size(), renderdepth, indent.GetChars());
 		indent += "  ";
+	}
+
+	if (MirrorFlag > 0 && gl_mirror_maxportals > 0)
+	{
+		// Keep the biggest portals, drop the rest before rendering anything.
+		TArray<HWPortal*> limited;
+		for (auto q : di->Portals)
+		{
+			if (q == nullptr) continue;
+			const int type = q->GetHWPortalType();
+			if (type == HWP_SKY || type == HWP_HORIZON) continue;
+			limited.Push(q);
+		}
+		if ((int)limited.Size() > gl_mirror_maxportals)
+		{
+			std::sort(limited.begin(), limited.end(), [](HWPortal *a, HWPortal *b) { return a->lines.Size() > b->lines.Size(); });
+			for (unsigned i = gl_mirror_maxportals; i < limited.Size(); i++)
+			{
+				limited[i]->lines.Clear();	// lines.Size() == 0 makes the loop below skip it
+			}
+		}
 	}
 
 	while (di->Portals.Pop(p) && p)
