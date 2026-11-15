@@ -1055,6 +1055,14 @@ class Actor : Thinker native
 	native clearscope int GetSpawnHealth() const;
 	native double GetCrouchFactor(int ptr = AAPTR_PLAYER1);
 	native double GetCVar(string cvar);
+
+	// Headcutter: true when this actor's player is playing with a controller (their last
+	// button press came from one). Lets DECORATE weapons pick controller or mouse/keyboard
+	// controls, for example which trigger fires which of two guns. Local input state.
+	clearscope bool UsingGamepad() const
+	{
+		return player != null && player.UsingGamepad();
+	}
 	native string GetCVarString(string cvar);
 	native int GetPlayerInput(int inputnum, int ptr = AAPTR_DEFAULT);
 	native int CountProximity(class<Actor> classname, double distance, int flags = 0, int ptr = AAPTR_DEFAULT);
