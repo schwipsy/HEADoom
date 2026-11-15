@@ -131,6 +131,10 @@ public:
 	void BindPPTexture(int index, int filter = GL_NEAREST, int wrap = GL_CLAMP_TO_EDGE);
 	void CopyPPToScene();
 
+	// Scene depth as a texture (for SSAO); false when the device cannot sample depth
+	bool HasSceneDepthTexture() const { return (bool)mSceneDepthStencilTex; }
+	void BindSceneDepthTexture(int index) { mSceneDepthStencilTex.Bind(index, GL_NEAREST, GL_CLAMP_TO_EDGE); }
+
 	int GetWidth() const { return mWidth; }
 	int GetHeight() const { return mHeight; }
 
@@ -173,6 +177,7 @@ private:
 	PPGLTexture mPPTex;
 	PPGLFrameBuffer mPPFB;
 	void CreatePPBuffer();
+	bool CreateSceneWithDepthTexture(int width, int height);
 
 	static bool FailedCreate;
 

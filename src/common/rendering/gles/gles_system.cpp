@@ -225,6 +225,10 @@ namespace OpenGLESRenderer
 			gles.npotAvailable = CheckExtension("GL_OES_texture_npot");
 			gles.depthClampAvailable = CheckExtension("GL_EXT_depth_clamp");
 			gles.anistropicFilterAvailable = CheckExtension("GL_EXT_texture_filter_anisotropic");
+			int esMajor = 0;
+			sscanf(glVersionStr, "OpenGL ES %d", &esMajor);
+			gles.depthTextureSized = esMajor >= 3;
+			gles.depthTextureAvailable = esMajor >= 3 || CheckExtension("GL_OES_depth_texture");
 		}
 		else if (gles.glesMode == GLES_MODE_OGL2)
 		{
@@ -236,6 +240,8 @@ namespace OpenGLESRenderer
 			gles.useMappedBuffers = true;
 			gles.depthClampAvailable = true;
 			gles.anistropicFilterAvailable = true;
+			gles.depthTextureAvailable = true;
+			gles.depthTextureSized = true;
 		}
 		else if (gles.glesMode == GLES_MODE_OGL3)
 		{
@@ -247,6 +253,8 @@ namespace OpenGLESRenderer
 			gles.useMappedBuffers = true;
 			gles.depthClampAvailable = true;
 			gles.anistropicFilterAvailable = true;
+			gles.depthTextureAvailable = true;
+			gles.depthTextureSized = true;
 		}
 
 		setGlVersion(glVersion);

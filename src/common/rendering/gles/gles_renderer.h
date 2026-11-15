@@ -61,6 +61,10 @@ namespace OpenGLESRenderer
 	class FPresent3DRowShader;
 	class FShadowMapShader;
 
+// SSAO pass for the GLES backend (gles_ssao.cpp)
+class FGLESAmbientOcclusion;
+void DeleteGLESAmbientOcclusion(FGLESAmbientOcclusion *&ao);
+
 // A GLDEFS "PostProcess" shader compiled for the GLES backend.
 struct FGLESCustomPostShader
 {
@@ -105,6 +109,9 @@ public:
 	void RunCustomPostShaders(const char *target);
 	bool CompileCustomPostShader(int index, FGLESCustomPostShader &out);
 	TArray<FGLESCustomPostShader*> mCustomPostShaders;
+
+	void AmbientOccludeScene(float m5);
+	FGLESAmbientOcclusion *mSSAO = nullptr;
 
 	void CopyToBackbuffer(const IntRect *bounds, bool applyGamma);
 	void DrawPresentTexture(const IntRect &box, bool applyGamma);

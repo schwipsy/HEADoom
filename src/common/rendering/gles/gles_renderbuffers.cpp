@@ -66,6 +66,7 @@ namespace OpenGLESRenderer
 		DeleteFrameBuffer(mSceneFB);
 		DeleteRenderBuffer(mSceneDepthStencilBuf);
 		DeleteRenderBuffer(mSceneStencilBuf);
+		DeleteTexture(mSceneDepthStencilTex);
 		DeleteFrameBuffer(mPPFB);
 		DeleteTexture(mPPTex);
 	}
@@ -145,6 +146,8 @@ namespace OpenGLESRenderer
 	void FGLRenderBuffers::CreateScene(int width, int height)
 	{
 		ClearScene();
+		if (gles.depthTextureAvailable && CreateSceneWithDepthTexture(width, height))
+			return;
 		if(gles.depthStencilAvailable)
 			mSceneDepthStencilBuf = CreateRenderBuffer("SceneDepthStencil", GL_DEPTH24_STENCIL8, width, height);
 		else
@@ -153,6 +156,60 @@ namespace OpenGLESRenderer
 			mSceneStencilBuf = CreateRenderBuffer("SceneStencil", GL_STENCIL_INDEX8, width, height);
 		}
 		mSceneFB= CreateFrameBuffer("SceneFB", mSceneTex, mSceneDepthStencilBuf, mSceneStencilBuf);
+	}
+
+	//==========================================================================
+	//
+	// Scene buffer with a depth texture instead of a depth renderbuffer, so the
+	// SSAO pass can read the depth. Falls back to renderbuffers if the driver
+	// does not accept it.
+	//
+	//==========================================================================
+
+	bool FGLRenderBuffers::CreateSceneWithDepthTexture(int width, int height)
+	{
+		constexpr GLenum DEPTH_STENCIL = 0x84F9;		// GL_DEPTH_STENCIL(_OES)
+		constexpr GLenum UNSIGNED_INT_24_8 = 0x84FA;	// GL_UNSIGNED_INT_24_8(_OES)
+		constexpr GLenum DEPTH24_STENCIL8 = 0x88F0;
+
+		while (glGetError() != GL_NO_ERROR) {}
+
+		mSceneDepthStencilTex.Width = width;
+		mSceneDepthStencilTex.Height = height;
+		glGenTextures(1, &mSceneDepthStencilTex.handle);
+		glBindTexture(GL_TEXTURE_2D, mSceneDepthStencilTex.handle);
+		if (gles.depthStencilAvailable)
+			glTexImage2D(GL_TEXTURE_2D, 0, gles.depthTextureSized ? DEPTH24_STENCIL8 : DEPTH_STENCIL, width, height, 0, DEPTH_STENCIL, UNSIGNED_INT_24_8, nullptr);
+		else
+			glTexImage2D(GL_TEXTURE_2D, 0, gles.depthTextureSized ? GL_DEPTH_COMPONENT16 : GL_DEPTH_COMPONENT, width, height, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_SHORT, nullptr);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glBindTexture(GL_TEXTURE_2D, 0);
+
+		if (!gles.depthStencilAvailable)
+			mSceneStencilBuf = CreateRenderBuffer("SceneStencil", GL_STENCIL_INDEX8, width, height);
+
+		glGenFramebuffers(1, &mSceneFB.handle);
+		glBindFramebuffer(GL_FRAMEBUFFER, mSceneFB.handle);
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, mSceneTex.handle, 0);
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, mSceneDepthStencilTex.handle, 0);
+		if (gles.depthStencilAvailable)
+			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_TEXTURE_2D, mSceneDepthStencilTex.handle, 0);
+		else
+			glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER, mSceneStencilBuf.handle);
+
+		if (glGetError() != GL_NO_ERROR || glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+		{
+			Printf("GLES: no depth texture support, SSAO is off\n");
+			glBindFramebuffer(GL_FRAMEBUFFER, 0);
+			ClearScene();
+			gles.depthTextureAvailable = false;
+			return false;
+		}
+		ClearFrameBuffer(true, true);
+		return true;
 	}
 
 	//==========================================================================

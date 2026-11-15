@@ -116,6 +116,8 @@ namespace OpenGLESRenderer
 		bool forceGLSLv100;
 		bool depthClampAvailable;
 		bool anistropicFilterAvailable;
+		bool depthTextureAvailable;	// scene depth can be sampled (needed for SSAO)
+		bool depthTextureSized;		// depth-stencil texture takes the sized internal format (not GLES 2)
 		int glesMode;
 		const char* shaderVersionString;
 		int max_texturesize;

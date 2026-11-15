@@ -54,6 +54,7 @@ public:
 	void FirstEye() override;
 	void NextEye(int eyecount) override;
 	void SetSceneRenderTarget(bool useSSAO) override;
+	void AmbientOccludeScene(float m5) override;
 	void WaitForCommands(bool finish) override;
 	void CopyScreenToBuffer(int width, int height, uint8_t* buffer) override;
 	bool FlipSavePic() const override { return true; }

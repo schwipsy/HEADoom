@@ -743,6 +743,7 @@ if (HAVE_GLES2)
 		common/rendering/gles/gles_renderbuffers.cpp
 		common/rendering/gles/gles_postprocess.cpp
 		common/rendering/gles/gles_postprocessstate.cpp
+		common/rendering/gles/gles_ssao.cpp
 		common/rendering/gles/gles_buffers.cpp
 		common/rendering/gles/gles_hwtexture.cpp
 		common/rendering/gles/gles_shader.cpp

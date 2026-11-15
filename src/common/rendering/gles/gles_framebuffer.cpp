@@ -334,6 +334,13 @@ void OpenGLFrameBuffer::NextEye(int eyecount)
 	//GLRenderer->mBuffers->NextEye(eyecount);
 }
 
+void OpenGLFrameBuffer::AmbientOccludeScene(float m5)
+{
+#ifndef NO_RENDER_BUFFER
+	GLRenderer->AmbientOccludeScene(m5);
+#endif
+}
+
 void OpenGLFrameBuffer::SetSceneRenderTarget(bool useSSAO)
 {
 #ifndef NO_RENDER_BUFFER

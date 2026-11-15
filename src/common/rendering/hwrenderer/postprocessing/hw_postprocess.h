@@ -707,6 +707,7 @@ public:
 	PPAmbientOcclusion();
 	void Render(PPRenderState *renderstate, float m5, int sceneWidth, int sceneHeight);
 	void SetNoAmbientOcclusion() { level_noAmbientOcclusion = true; }
+	bool IsDisabledForLevel() const { return level_noAmbientOcclusion; }
 
 private:
 	void CreateShaders();
