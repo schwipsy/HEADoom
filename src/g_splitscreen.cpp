@@ -398,12 +398,23 @@ DEFINE_ACTION_FUNCTION(_PlayerInfo, UsingGamepad)
 //
 //==========================================================================
 
+// Number of local splitscreen players (0 when not in splitscreen), for mods and SBARINFO
+// (for example: IfCVarInt not splitscreen_players, 2 { ...singleplayer only... }).
+CVAR(Int, splitscreen_players, 0, CVAR_NOSET | CVAR_NOSAVE)
+
 void G_TickSplitStatusBars()
 {
-	if (StatusBar == nullptr)
-		return;
 	int locals[MAXPLAYERS];
 	const int count = G_GetLocalPlayers(locals);
+	const int splitcount = count > 1 ? count : 0;
+	if (splitscreen_players != splitcount)
+	{
+		UCVarValue val;
+		val.Int = splitcount;
+		splitscreen_players->ForceSet(val, CVAR_Int);
+	}
+	if (StatusBar == nullptr)
+		return;
 	if (count <= 1)
 		return;
 

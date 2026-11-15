@@ -184,6 +184,42 @@ class SBarInfoCommand
 		SBarInfo	*script;
 };
 
+// Splitscreen: every local player has an own status bar, but they all share the parsed
+// SBARINFO script. Values a command animates over time (interpolated numbers and bars) are
+// therefore kept per player. SBarInfoCurrentPlayer is the player whose bar is ticked or drawn,
+// -1 outside of that (parsing), where a write sets the value for every player.
+static int SBarInfoCurrentPlayer = -1;
+
+template<class T> class SBarPerPlayer
+{
+	T v[MAXPLAYERS] = {};
+	T& cur() { return v[SBarInfoCurrentPlayer < 0 ? 0 : SBarInfoCurrentPlayer]; }
+	const T& cur() const { return v[SBarInfoCurrentPlayer < 0 ? 0 : SBarInfoCurrentPlayer]; }
+public:
+	SBarPerPlayer() = default;
+	SBarPerPlayer(T x) { for (auto& e : v) e = x; }
+	operator T() const { return cur(); }
+	SBarPerPlayer& operator=(T x)
+	{
+		if (SBarInfoCurrentPlayer < 0) for (auto& e : v) e = x;
+		else cur() = x;
+		return *this;
+	}
+	SBarPerPlayer& operator+=(T x) { cur() += x; return *this; }
+	SBarPerPlayer& operator-=(T x) { cur() -= x; return *this; }
+};
+
+struct FSBarInfoPlayerScope
+{
+	int saved;
+	FSBarInfoPlayerScope(player_t* p) : saved(SBarInfoCurrentPlayer)
+	{
+		const int n = p ? int(p - players) : -1;
+		SBarInfoCurrentPlayer = (n >= 0 && n < MAXPLAYERS) ? n : 0;
+	}
+	~FSBarInfoPlayerScope() { SBarInfoCurrentPlayer = saved; }
+};
+
 class SBarInfoCommandFlowControl : public SBarInfoCommand
 {
 	public:
@@ -260,7 +296,7 @@ class SBarInfoCommandFlowControl : public SBarInfoCommand
 		SBarInfoCommand	*NextCommand(FScanner &sc);
 
 		TDeletingArray<SBarInfoCommand *> commands[2];
-		bool truth;
+		SBarPerPlayer<bool> truth;
 };
 
 class SBarInfoNegatableFlowControl : public SBarInfoCommandFlowControl
@@ -1042,6 +1078,7 @@ public:
 
 	void _Draw (EHudState state)
 	{
+		FSBarInfoPlayerScope playerScope(CPlayer);
 		int hud = STBAR_NORMAL;
 		if(state == HUD_StatusBar)
 		{
@@ -1126,6 +1163,7 @@ public:
 
 	void _NewGame ()
 	{
+		FSBarInfoPlayerScope playerScope(CPlayer);
 		// Reset the huds
 		script->ResetHuds();
 		lastHud = -1; // Reset
@@ -1138,6 +1176,7 @@ public:
 
 	void _Tick ()
 	{
+		FSBarInfoPlayerScope playerScope(CPlayer);
 		SetReferences();
 		if(currentPopup != DBaseStatusBar::POP_None)
 		{

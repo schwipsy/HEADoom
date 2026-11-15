@@ -137,7 +137,8 @@ extend class BaseStatusBar
 	version("4.15.1") virtual bool DrawScoreboard(double ticFrac)
 	{
 		if (!ScoreboardFont || GameState != GS_LEVEL || !CPlayer
-			|| (CPlayer.PlayerState != PST_DEAD && !IsScoreboardOpen()))
+			|| (CPlayer.PlayerState != PST_DEAD && !IsScoreboardOpen())
+			|| (CPlayer.PlayerState == PST_DEAD && !IsScoreboardOpen() && splitscreen_players > 1))
 		{
 			return false;
 		}

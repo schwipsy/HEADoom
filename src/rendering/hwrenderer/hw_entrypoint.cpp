@@ -410,6 +410,7 @@ static sector_t* RenderSplitViews(const int* locals, int count)
 		const int n = gSplitFrame.count++;
 		gSplitFrame.player[n] = locals[v];
 		gSplitFrame.sector[n] = sec;
+		gSplitFrame.viewpoint[n] = &vp;
 		gSplitFrame.x[n] = x; gSplitFrame.y[n] = y; gSplitFrame.w[n] = w; gSplitFrame.h[n] = h;
 	}
 

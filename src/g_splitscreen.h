@@ -7,6 +7,7 @@
 //
 
 struct sector_t;
+struct FRenderViewpoint;
 
 enum { SPLITSCREEN_MAXVIEWS = 4 };
 
@@ -17,6 +18,8 @@ struct FSplitFrame
 	sector_t* sector[SPLITSCREEN_MAXVIEWS] = {};
 	int x[SPLITSCREEN_MAXVIEWS] = {}, y[SPLITSCREEN_MAXVIEWS] = {};	// top-down screen coordinates
 	int w[SPLITSCREEN_MAXVIEWS] = {}, h[SPLITSCREEN_MAXVIEWS] = {};
+	const FRenderViewpoint* viewpoint[SPLITSCREEN_MAXVIEWS] = {};
+	int current = -1;	// view whose HUD is being drawn, -1 outside of that
 };
 
 extern FSplitFrame gSplitFrame;

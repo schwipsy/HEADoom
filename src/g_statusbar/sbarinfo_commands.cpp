@@ -1516,9 +1516,9 @@ class CommandDrawNumber : public CommandDrawString
 				// 10^9 is a largest we can hold in a 32-bit int.  So if we go any larger we have to toss out the positions limit.
 				int maxval = length <= 9 ? (int) ceil(pow(10., length))-1 : INT_MAX;
 				if(!fillZeros || length == 1)
-					drawValue = clamp(drawValue, -maxval, maxval);
+					drawValue = clamp((int)drawValue, -maxval, maxval);
 				else //The community wanted negatives to take the last digit, but we can only do this if there is room
-					drawValue = clamp(drawValue, length <= 9 ? (int) -(ceil(pow(10., length-1))-1) : INT_MIN, maxval);
+					drawValue = clamp((int)drawValue, length <= 9 ? (int) -(ceil(pow(10., length-1))-1) : INT_MIN, maxval);
 			}
 			else if(length <= 9)
 			{
@@ -1576,7 +1576,7 @@ class CommandDrawNumber : public CommandDrawString
 		bool				usePrefix;
 
 		int					interpolationSpeed;
-		int					drawValue;
+		SBarPerPlayer<int>	drawValue;
 
 		int					length;
 		int					lowValue;
@@ -2873,7 +2873,7 @@ class CommandDrawBar : public SBarInfoCommand
 		SBarInfoCoordinate	y;
 
 		int					interpolationSpeed;
-		double				drawValue;
+		SBarPerPlayer<double>	drawValue;
 		double				pixel;
 };
 
@@ -3179,7 +3179,7 @@ class CommandDrawGem : public SBarInfoCommand
 			else
 				goalValue = 0;
 
-			goalValue = reverse ? 100 - goalValue : goalValue;
+			goalValue = reverse ? 100 - goalValue : (int)goalValue;
 
 			if(interpolationSpeed != 0 && (!hudChanged || primaryLevel->time == 1)) // At the start force an animation
 			{
@@ -3208,10 +3208,10 @@ class CommandDrawGem : public SBarInfoCommand
 		SBarInfoCoordinate	y;
 
 		int					interpolationSpeed;
-		int					drawValue;
-		int					goalValue;
+		SBarPerPlayer<int>	drawValue;
+		SBarPerPlayer<int>	goalValue;
 	private:
-		int					chainWiggle;
+		SBarPerPlayer<int>	chainWiggle;
 		static FCRandom		pr_chainwiggle;
 };
 FCRandom CommandDrawGem::pr_chainwiggle; //use the same method of chain wiggling as heretic.

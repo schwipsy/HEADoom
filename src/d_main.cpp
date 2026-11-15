@@ -1428,6 +1428,7 @@ void D_Display ()
 						twod->SetSize(screen->GetWidth(), screen->GetHeight());
 						twod->SetOffset({ 0, 0 });
 						F2D_ClearForcedScissor();
+						gSplitFrame.current = -1;
 						StatusBar->SetScale();
 					}
 				} restore;
@@ -1445,6 +1446,7 @@ void D_Display ()
 					twod->SetOffset({ (double)gSplitFrame.x[v], (double)gSplitFrame.y[v] });
 					F2D_SetForcedScissor(gSplitFrame.x[v], gSplitFrame.y[v], gSplitFrame.x[v] + gSplitFrame.w[v], gSplitFrame.y[v] + gSplitFrame.h[v]);
 					StatusBar->SetScale();
+					gSplitFrame.current = v;
 					drawHud(gSplitFrame.sector[v], true);
 				}
 			}

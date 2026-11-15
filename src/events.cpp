@@ -33,6 +33,7 @@
 #include "g_game.h"
 #include "info.h"
 #include "utf8.h"
+#include "g_splitscreen.h"
 
 EventManager staticEventManager;
 
@@ -2079,7 +2080,9 @@ void DStaticEventHandler::WorldTick()
 FRenderEvent EventManager::SetupRenderEvent()
 {
 	FRenderEvent e;
-	auto &vp = r_viewpoint;
+	// Splitscreen: report the viewpoint of the view whose HUD is being drawn.
+	const int sv = gSplitFrame.current;
+	auto &vp = (sv >= 0 && sv < gSplitFrame.count && gSplitFrame.viewpoint[sv]) ? *gSplitFrame.viewpoint[sv] : r_viewpoint;
 	e.ViewPos = vp.Pos;
 	e.ViewAngle = vp.Angles.Yaw;
 	e.ViewPitch = vp.Angles.Pitch;
