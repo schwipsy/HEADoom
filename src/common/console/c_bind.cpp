@@ -180,9 +180,13 @@ static bool ExecBinding(FString binding, unsigned int key, bool keyup, bool isDo
 	return true;
 }
 
+static void TickChords(unsigned int nowtime);
+
 void C_TickQueuedInputs()
 {
 	unsigned int nowtime = (unsigned)I_msTime();
+
+	TickChords(nowtime);
 
 	// Flush and execute delayed synthetic releases
 	for (unsigned int key = 0; key < NUM_KEYS; ++key)
@@ -319,6 +323,279 @@ static const char *ConfigKeyName(int keynum)
 			return "KP-Equals";
 	}
 	return name;
+}
+
+//=============================================================================
+//
+// Chord bindings: two controller buttons pressed together run a command of
+// their own instead of their single bindings (for example LShoulder +
+// RShoulder). A button that is part of a chord waits cl_chordthreshold ms for
+// its partner before its own binding runs. If the partner comes later while
+// the first button is still held, the first button's binding is let go and
+// the chord starts.
+//
+//=============================================================================
+
+CVAR(Int, cl_chordthreshold, 120, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+
+struct FChordBind
+{
+	unsigned int Key1, Key2;	// Key1 < Key2
+	FString Command;
+};
+static TArray<FChordBind> ChordBinds;
+
+static FixedBitArray<NUM_KEYS> ChordPending;		// down, waiting for a partner
+static unsigned int ChordDeadline[NUM_KEYS];
+static FixedBitArray<NUM_KEYS> ChordSingleDown;		// down, its own binding is running
+static FixedBitArray<NUM_KEYS> ChordDeferredUp;		// tapped: its own binding is let go shortly
+static unsigned int ChordUpTime[NUM_KEYS];
+static FixedBitArray<NUM_KEYS> ChordHeld;			// down as one half of a chord
+static unsigned int ChordPartner[NUM_KEYS];
+static unsigned int ChordDownKey[NUM_KEYS];			// key the chord command was started with
+static FString ChordCommand[NUM_KEYS];				// chord command to let go of ("" once done)
+
+static bool RunKeyBinding(unsigned int key, bool isKeyUp, FKeyBindings *binds, FKeyBindings *doublebinds);
+
+static bool IsChordKey(unsigned int key)
+{
+	return key >= KEY_FIRSTJOYBUTTON && key < NUM_KEYS;
+}
+
+static int FindChord(unsigned int k1, unsigned int k2)
+{
+	if (k1 > k2) std::swap(k1, k2);
+	for (unsigned int i = 0; i < ChordBinds.Size(); i++)
+	{
+		if (ChordBinds[i].Key1 == k1 && ChordBinds[i].Key2 == k2) return i;
+	}
+	return -1;
+}
+
+static bool IsInChord(unsigned int key)
+{
+	for (auto &c : ChordBinds)
+	{
+		if (c.Key1 == key || c.Key2 == key) return true;
+	}
+	return false;
+}
+
+static void SetChord(unsigned int k1, unsigned int k2, const char *cmd, bool override = true)
+{
+	if (!IsChordKey(k1) || !IsChordKey(k2) || k1 == k2) return;
+	if (k1 > k2) std::swap(k1, k2);
+	int i = FindChord(k1, k2);
+	if (cmd == nullptr || *cmd == 0)
+	{
+		if (i >= 0 && override) ChordBinds.Delete(i);
+		return;
+	}
+	if (i >= 0)
+	{
+		if (override) ChordBinds[i].Command = cmd;
+	}
+	else
+	{
+		ChordBinds.Push({ k1, k2, cmd });
+	}
+}
+
+static void UnbindChords(const TArray<int> *filter)
+{
+	for (int i = ChordBinds.SSize() - 1; i >= 0; i--)
+	{
+		if (filter == nullptr || filter->Contains(ChordBinds[i].Key1) || filter->Contains(ChordBinds[i].Key2))
+		{
+			ChordBinds.Delete(i);
+		}
+	}
+}
+
+static FString ChordName(const FChordBind &c)
+{
+	FString name = ConfigKeyName(c.Key1);
+	name << "+" << ConfigKeyName(c.Key2);
+	return name;
+}
+
+// "LShoulder+RShoulder" -> keys (config names)
+static bool ParseChordName(const char *name, unsigned int &k1, unsigned int &k2)
+{
+	FString s = name;
+	auto plus = s.IndexOf('+', 1);
+	if (plus <= 0) return false;
+	k1 = GetConfigKeyFromName(s.Left(plus).GetChars());
+	k2 = GetConfigKeyFromName(s.Mid(plus + 1).GetChars());
+	return IsChordKey(k1) && IsChordKey(k2) && k1 != k2;
+}
+
+void C_ClearChordBindings()
+{
+	ChordBinds.Clear();
+}
+
+void C_DoChordBind(const char *name, const char *cmd)
+{
+	unsigned int k1, k2;
+	if (ParseChordName(name, k1, k2)) SetChord(k1, k2, cmd);
+}
+
+void C_ArchiveChordBindings(FConfigFile *f)
+{
+	f->ClearCurrentSection();
+	for (auto &c : ChordBinds)
+	{
+		f->SetValueForKey(ChordName(c).GetChars(), c.Command.GetChars());
+	}
+}
+
+// keys of every chord bound to the command, two per chord
+TArray<int> C_GetChordKeysForCommand(const char *cmd)
+{
+	TArray<int> keys;
+	for (auto &c : ChordBinds)
+	{
+		if (c.Command.CompareNoCase(cmd) == 0)
+		{
+			keys.Push(c.Key1);
+			keys.Push(c.Key2);
+		}
+	}
+	return keys;
+}
+
+static void TickChords(unsigned int nowtime)
+{
+	for (unsigned int key = KEY_FIRSTJOYBUTTON; key < NUM_KEYS; key++)
+	{
+		if (ChordDeferredUp[key] && int(ChordUpTime[key] - nowtime) <= 0)
+		{
+			ChordDeferredUp.Clear(key);
+			RunKeyBinding(key, true, &Bindings, &DoubleBindings);
+		}
+		if (ChordPending[key] && int(ChordDeadline[key] - nowtime) <= 0)
+		{
+			// no partner came: the button counts on its own
+			ChordPending.Clear(key);
+			ChordSingleDown.Set(key);
+			RunKeyBinding(key, false, &Bindings, &DoubleBindings);
+		}
+	}
+}
+
+// 1 / 0 = handled (the C_DoKey result), -1 = run the key's own binding as usual
+static int ChordDoKey(unsigned int key, bool isKeyUp)
+{
+	const unsigned int nowtime = (unsigned)I_msTime();
+
+	if (!isKeyUp)
+	{
+		if (ChordHeld[key] || ChordPending[key] || ChordSingleDown[key]) return 1;	// repeat
+		if (ChordDeferredUp[key])
+		{
+			ChordDeferredUp.Clear(key);
+			RunKeyBinding(key, true, &Bindings, &DoubleBindings);
+		}
+		if (!IsInChord(key)) return -1;
+
+		for (unsigned int other = KEY_FIRSTJOYBUTTON; other < NUM_KEYS; other++)
+		{
+			if (!ChordPending[other] && !ChordSingleDown[other]) continue;
+			int c = FindChord(key, other);
+			if (c < 0) continue;
+
+			if (ChordSingleDown[other])
+			{
+				// its own binding already started: let go of it first
+				ChordSingleDown.Clear(other);
+				ClearQueuedPress(other);
+				RunKeyBinding(other, true, &Bindings, &DoubleBindings);
+			}
+			ChordPending.Clear(other);
+
+			ChordHeld.Set(key);
+			ChordHeld.Set(other);
+			ChordPartner[key] = other;
+			ChordPartner[other] = key;
+			ChordDownKey[key] = ChordDownKey[other] = key;
+			ChordCommand[key] = ChordCommand[other] = ChordBinds[c].Command;
+			ExecBinding(ChordBinds[c].Command, key, false, false);
+			return 1;
+		}
+
+		ChordPending.Set(key);
+		ChordDeadline[key] = nowtime + max(0, *cl_chordthreshold);
+		return 1;
+	}
+
+	if (ChordHeld[key])
+	{
+		// the first of the two to come up ends the chord, the other one is ignored
+		FString cmd = ChordCommand[key];
+		unsigned int other = ChordPartner[key];
+		ChordHeld.Clear(key);
+		ChordCommand[key] = "";
+		if (ChordHeld[other] && ChordPartner[other] == key) ChordCommand[other] = "";
+		if (cmd.IsNotEmpty()) ExecBinding(cmd, ChordDownKey[key], true, false);
+		return 1;
+	}
+	if (ChordPending[key])
+	{
+		// tapped before the partner came: run its own binding, let go of it a moment later
+		ChordPending.Clear(key);
+		RunKeyBinding(key, false, &Bindings, &DoubleBindings);
+		ChordDeferredUp.Set(key);
+		ChordUpTime[key] = nowtime + SYNTHETIC_RELEASE_DELAY;
+		return 1;
+	}
+	if (ChordSingleDown[key])
+	{
+		ChordSingleDown.Clear(key);
+	}
+	return -1;
+}
+
+CCMD(chordbind)
+{
+	if (argv.argc() < 3)
+	{
+		if (argv.argc() == 2)
+		{
+			Printf("Usage: chordbind <button1> <button2> [command]\n");
+			return;
+		}
+		Printf("Current chord bindings:\n");
+		for (auto &c : ChordBinds)
+		{
+			Printf("%s \"%s\"\n", ChordName(c).GetChars(), c.Command.GetChars());
+		}
+		return;
+	}
+	unsigned int k1 = GetKeyFromName(argv[1]), k2 = GetKeyFromName(argv[2]);
+	if (!IsChordKey(k1) || !IsChordKey(k2) || k1 == k2)
+	{
+		Printf("Chords need two different controller buttons\n");
+		return;
+	}
+	if (argv.argc() == 3)
+	{
+		int c = FindChord(k1, k2);
+		if (c >= 0) Printf("%s \"%s\"\n", ChordName(ChordBinds[c]).GetChars(), ChordBinds[c].Command.GetChars());
+		else Printf("%s+%s is not bound\n", KeyName(k1), KeyName(k2));
+		return;
+	}
+	SetChord(k1, k2, argv[3]);
+}
+
+CCMD(unchordbind)
+{
+	if (argv.argc() < 3)
+	{
+		Printf("Usage: unchordbind <button1> <button2>\n");
+		return;
+	}
+	SetChord(GetKeyFromName(argv[1]), GetKeyFromName(argv[2]), nullptr);
 }
 
 //=============================================================================
@@ -651,6 +928,7 @@ void C_UnbindAll (const TArray<int> *filter)
 	Bindings.UnbindAll(filter);
 	DoubleBindings.UnbindAll(filter);
 	AutomapBindings.UnbindAll(filter);
+	UnbindChords(filter);
 }
 
 UNSAFE_CCMD (unbindall)
@@ -797,6 +1075,20 @@ void ReadBindings(int lump, bool override, const TArray<int> *filter = nullptr)
 			continue;
 		}
 
+		if (sc.Compare("chordbind"))
+		{
+			sc.MustGetString();
+			FString name1 = sc.String;
+			sc.MustGetString();
+			unsigned int k1 = GetConfigKeyFromName(name1.GetChars()), k2 = GetConfigKeyFromName(sc.String);
+			sc.MustGetString();
+			if (filter == nullptr || filter->Contains(k1) || filter->Contains(k2))
+			{
+				SetChord(k1, k2, sc.String, override);
+			}
+			continue;
+		}
+
 		// bind destination is optional and is the same as the console command
 		if (sc.Compare("bind"))
 		{
@@ -937,6 +1229,17 @@ bool C_DoKey(event_t *ev, FKeyBindings *binds, FKeyBindings *doublebinds)
 		return false;
 	}
 
+	if (binds == &Bindings && IsChordKey(key))
+	{
+		int handled = ChordDoKey(key, isKeyUp);
+		if (handled >= 0) return handled != 0;
+	}
+
+	return RunKeyBinding(key, isKeyUp, binds, doublebinds);
+}
+
+static bool RunKeyBinding(unsigned int key, bool isKeyUp, FKeyBindings *binds, FKeyBindings *doublebinds)
+{
 	FString binding;
 	const bool hasDoubleBind = doublebinds != nullptr && doublebinds->GetBind(key) != nullptr;
 	const bool hasQueuedPress = QueuedPresses[key] && QueuedBindings[key] == binds;

@@ -1126,6 +1126,15 @@ DEFINE_ACTION_FUNCTION(FKeyBindings, GetAllKeysForCommand)
 	return 0;
 }
 
+DEFINE_ACTION_FUNCTION(FKeyBindings, GetChordKeysForCommand)
+{
+	PARAM_SELF_STRUCT_PROLOGUE(FKeyBindings);
+	PARAM_POINTER(array, TArray<int>);
+	PARAM_STRING(cmd);
+	*array = C_GetChordKeysForCommand(cmd.GetChars());
+	return 0;
+}
+
 DEFINE_ACTION_FUNCTION(FKeyBindings, GetBinding)
 {
 	PARAM_SELF_STRUCT_PROLOGUE(FKeyBindings);

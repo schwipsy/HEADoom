@@ -84,6 +84,12 @@ extern FKeyBindings AutomapBindings;
 bool C_DoKey (event_t *ev, FKeyBindings *binds, FKeyBindings *doublebinds);
 void C_TickQueuedInputs();
 
+// Two-button controller chords ("chordbind LShoulder RShoulder +ability3")
+void C_ClearChordBindings();
+void C_DoChordBind(const char *name, const char *cmd);
+void C_ArchiveChordBindings(FConfigFile *f);
+TArray<int> C_GetChordKeysForCommand(const char *cmd);
+
 // Stuff used by the customize controls menu
 void C_SetDefaultBindings (const TArray<int> *filter = nullptr);
 void C_UnbindAll (const TArray<int> *filter = nullptr);

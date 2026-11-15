@@ -28,6 +28,7 @@ struct KeyBindings native version("2.4")
 
 	native int, int GetKeysForCommand(String cmd);
 	native void GetAllKeysForCommand(out array<int> list, String cmd);
+	native void GetChordKeysForCommand(out array<int> list, String cmd);	// two keys per chord
 	native String GetBinding(int key);
 
 	native void SetBind(int key, String cmd);

@@ -839,6 +839,15 @@ void FGameConfigFile::DoKeySetup(FString section)
 		}
 	}
 
+	if (SetSection(section + ".ChordBindings"))
+	{
+		C_ClearChordBindings();
+		while (NextInSection(key, value))
+		{
+			C_DoChordBind(key, value);
+		}
+	}
+
 	if (GameLastRunVer < 1)
 	{
 		// Multiple gamepad reworks were done during
@@ -990,6 +999,9 @@ void FGameConfigFile::ArchiveGameData(FString section)
 
 	SetSection (section + ".AutomapBindings", true);
 	AutomapBindings.ArchiveBindings (this);
+
+	SetSection (section + ".ChordBindings", true);
+	C_ArchiveChordBindings (this);
 }
 
 void FGameConfigFile::ArchiveGlobalData ()
