@@ -290,6 +290,17 @@ class Inventory : Actor
 		return false;
 	}
 
+	// Splitscreen: copied to a player who joins a game in progress (see PlayerPawn.SplitCopyInventoryFrom).
+	// Weapons, ammo and armor are handled there; for anything else this decides. By default keys,
+	// inventory bar items and permanent (unclearable) items such as upgrades are copied.
+	virtual bool CopiesToJoiningPlayer()
+	{
+		return bIsKeyItem || bInvBar || bUnclearable;
+	}
+
+	// Called on the joining player's copy after its amount was set, to copy extra state from source.
+	virtual void CopyToJoiningPlayer(Inventory source) {}
+
 	protected void ShareItemWithPlayers(Actor giver)
 	{
 		if (bSharingItem)
@@ -724,7 +735,7 @@ class Inventory : Actor
 			toucher.HasReceived(self, cls);
 
 			// If the item can be shared, make sure every player gets a copy.
-			if (multiplayer && !deathmatch && ShouldShareItem(toucher))
+			if (multiplayer && !deathmatch && (ShouldShareItem(toucher) || (bIsKeyItem && splitscreen_players >= 2)))
 				ShareItemWithPlayers(toucher);
 		}
 		return res, toucher;

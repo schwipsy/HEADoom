@@ -222,3 +222,15 @@ CCMD(splitscreen_give)
 		VMCall(func, params, 4, nullptr, 0);
 	}
 }
+
+// Debug / testing: splitscreen_printinv <player 1-4>
+CCMD(splitscreen_printinv)
+{
+	const int pnum = argv.argc() > 1 ? atoi(argv[1]) - 1 : consoleplayer;
+	if (pnum < 0 || pnum >= MAXPLAYERS || !playeringame[pnum] || players[pnum].mo == nullptr)
+		return;
+	auto mo = players[pnum].mo;
+	Printf("Player %d: health %d\n", pnum + 1, mo->health);
+	for (AActor* item = mo->Inventory; item != nullptr; item = item->Inventory)
+		Printf("  %s %d/%d\n", item->GetClass()->TypeName.GetChars(), item->IntVar(NAME_Amount), item->IntVar(NAME_MaxAmount));
+}

@@ -222,6 +222,8 @@ static void PlaceBesidePlayer(AActor* mo, AActor* anchor)
 //
 //==========================================================================
 
+CVAR(Bool, splitscreen_join_copyinventory, true, CVAR_ARCHIVE)
+
 bool G_AddSplitscreenPlayer(int pad, bool force = false)
 {
 	if (gamestate != GS_LEVEL || netgame || primaryLevel == nullptr)
@@ -280,6 +282,15 @@ bool G_AddSplitscreenPlayer(int pad, bool force = false)
 
 	players[slot].Bot->LocalPad = pad;
 	PlaceBesidePlayer(players[slot].mo, players[consoleplayer].mo);
+	if (splitscreen_join_copyinventory && players[consoleplayer].mo != nullptr && players[slot].mo != nullptr)
+	{
+		// The new player gets a copy of player 1's inventory, with full health and magazines.
+		IFVM(PlayerPawn, SplitCopyInventoryFrom)
+		{
+			VMValue params[] = { players[slot].mo, players[consoleplayer].mo };
+			VMCall(func, params, 2, nullptr, 0);
+		}
+	}
 	I_SplitscreenReservedPads |= 1u << pad;
 	return true;
 }
