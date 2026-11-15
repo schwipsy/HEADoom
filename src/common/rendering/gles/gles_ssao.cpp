@@ -572,7 +572,24 @@ void FGLESAmbientOcclusion::Render(FGLRenderer *renderer, FGLRenderBuffers *buff
 			glBlendEquation(GL_FUNC_ADD);
 			glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ZERO, GL_ONE);
 		}
+		// As on OpenGL and Vulkan, the scene's stencil test stays on here, so the
+		// pass for a portal only darkens that portal. Without it every portal pass
+		// darkened the whole view again.
+		GLint stencilOps[3] = { GL_KEEP, GL_KEEP, GL_KEEP };
+		if (stencilEnabled)
+		{
+			glGetIntegerv(GL_STENCIL_FAIL, &stencilOps[0]);
+			glGetIntegerv(GL_STENCIL_PASS_DEPTH_FAIL, &stencilOps[1]);
+			glGetIntegerv(GL_STENCIL_PASS_DEPTH_PASS, &stencilOps[2]);
+			glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
+			glEnable(GL_STENCIL_TEST);
+		}
 		renderer->RenderScreenQuad();
+		if (stencilEnabled)
+		{
+			glDisable(GL_STENCIL_TEST);
+			glStencilOp(stencilOps[0], stencilOps[1], stencilOps[2]);
+		}
 		glDisable(GL_BLEND);
 		glActiveTexture(GL_TEXTURE0);
 	}
