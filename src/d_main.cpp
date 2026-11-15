@@ -54,6 +54,7 @@
 #include "d_event.h"
 #include "d_main.h"
 #include "g_splitscreen.h"
+#include "g_steampipe.h"
 #include "d_net.h"
 #include "d_netinf.h"
 #include "decallib.h"
@@ -1663,6 +1664,7 @@ void D_DoomLoop ()
 			D_ProcessEvents();
 			D_Display ();
 			S_UpdateMusic();
+			SteamPipe_Poll();
 
 			if (gameloop_abort)
 			{

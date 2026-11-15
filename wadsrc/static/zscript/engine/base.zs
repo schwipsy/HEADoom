@@ -705,6 +705,17 @@ struct Console native
 	native static vararg void DebugPrintf(int debuglevel, string fmt, ...);
 }
 
+// Steam achievements and stats through the Steam launcher; no-ops without it.
+struct Steam native
+{
+	native static void Achievement(String apiName);	// unlock and store
+	native static void SetStat(String apiName, int value);
+	native static void AddStat(String apiName, int amount);
+	native static void Store();
+	native static bool IsOnline();
+	native static String PersonaName();
+}
+
 struct CVar native
 {
 	enum ECVarType
