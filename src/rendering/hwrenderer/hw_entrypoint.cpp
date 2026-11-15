@@ -402,7 +402,9 @@ static sector_t* RenderSplitViews(const int* locals, int count)
 
 		FRenderViewpoint& vp = v == 0 ? r_viewpoint : splitvp[v];
 		if (v != 0) vp.TicFrac = r_viewpoint.TicFrac;
-		sector_t* sec = RenderViewpoint(vp, p->camera, NULL, r_viewpoint.FieldOfView.Degrees(), ratio, fovratio, true, true);
+		// Each view uses its own camera's FOV, so one player's zoom does not affect the others.
+		const double viewfov = clamp(p->camera->GetFOV(r_viewpoint.TicFrac), 5., 170.);
+		sector_t* sec = RenderViewpoint(vp, p->camera, NULL, viewfov, ratio, fovratio, true, true);
 		if (v == 0) result = sec;
 
 		const int n = gSplitFrame.count++;
