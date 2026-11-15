@@ -111,6 +111,9 @@ public:
 	TArray<FGLESCustomPostShader*> mCustomPostShaders;
 
 	void AmbientOccludeScene(float m5);
+	void UpscaleScene(const IntRect &src, const IntRect &dst, bool linear);
+	GLuint mUpscaleProgram = 0;
+	bool mUpscaleFailed = false;
 	FGLESAmbientOcclusion *mSSAO = nullptr;
 
 	void CopyToBackbuffer(const IntRect *bounds, bool applyGamma);

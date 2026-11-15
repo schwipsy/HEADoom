@@ -354,8 +354,10 @@ void VkPostprocess::DrawPresentTexture(const IntRect &box, bool applyGamma, bool
 
 void VkPostprocess::AmbientOccludeScene(float m5)
 {
-	int sceneWidth = fb->GetBuffers()->GetSceneWidth();
-	int sceneHeight = fb->GetBuffers()->GetSceneHeight();
+	// The scene size, not the buffer size: with a scaled-down 3D view the AO
+	// works at the scene's own resolution instead of the full screen's.
+	int sceneWidth = fb->mSceneViewport.width;
+	int sceneHeight = fb->mSceneViewport.height;
 
 	VkPPRenderState renderstate(fb);
 	hw_postprocess.ssao.Render(&renderstate, m5, sceneWidth, sceneHeight);

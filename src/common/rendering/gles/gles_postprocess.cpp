@@ -27,6 +27,7 @@
 #include "gles_renderbuffers.h"
 #include "gles_renderer.h"
 #include "gles_postprocessstate.h"
+#include "gles_renderstate.h"
 #include "gles_shaderprogram.h"
 #include "hwrenderer/postprocessing/hw_postprocess.h"
 #include "hwrenderer/postprocessing/hw_postprocess_cvars.h"
@@ -349,6 +350,94 @@ void FGLRenderer::RunCustomPostShaders(const char *target)
 		mBuffers->CopyPPToScene();
 	mBuffers->BindCurrentFB();
 	glViewport(screen->mScreenViewport.left, screen->mScreenViewport.top, screen->mScreenViewport.width, screen->mScreenViewport.height);
+}
+
+//-----------------------------------------------------------------------------
+//
+// Stretches a 3D view rendered at a lower resolution (vid_scalefactor) back
+// to its full size, like the OpenGL and Vulkan backends do. GLES 2 has no
+// glBlitFramebuffer, so this draws a quad into the second buffer and copies
+// the result back.
+//
+//-----------------------------------------------------------------------------
+
+void FGLRenderer::UpscaleScene(const IntRect &src, const IntRect &dst, bool linear)
+{
+	if (mUpscaleFailed || dst.width <= 0 || dst.height <= 0)
+		return;
+
+	if (mUpscaleProgram == 0)
+	{
+		const char *version = gles.forceGLSLv100 ? "100" : gles.shaderVersionString;
+		const bool es100 = strcmp(version, "100") == 0;
+		FString prolog;
+		prolog.Format("#version %s\n", version);
+		prolog += "#ifdef GL_ES\nprecision highp float;\n#endif\n";
+		FString vp = prolog, fp = prolog;
+		if (es100)
+		{
+			vp += "attribute vec4 PositionInProjection;\nattribute vec2 UV;\nvarying vec2 TexCoord;\n";
+			fp += "#define texture texture2D\n#define FragColor gl_FragColor\nvarying vec2 TexCoord;\n";
+		}
+		else
+		{
+			vp += "in vec4 PositionInProjection;\nin vec2 UV;\nout vec2 TexCoord;\n";
+			fp += "in vec2 TexCoord;\nout vec4 FragColor;\n";
+		}
+		vp += "void main()\n{\n\tgl_Position = PositionInProjection;\n\tTexCoord = UV;\n}\n";
+		fp += "uniform sampler2D InputTexture;\nuniform vec4 SourceRect;\n";
+		fp += "void main()\n{\n\tFragColor = texture(InputTexture, SourceRect.xy + TexCoord * SourceRect.zw);\n}\n";
+
+		GLuint vs = CompileGLESShaderStage(GL_VERTEX_SHADER, vp, "scene upscale");
+		GLuint fs = vs ? CompileGLESShaderStage(GL_FRAGMENT_SHADER, fp, "scene upscale") : 0;
+		if (!vs || !fs)
+		{
+			if (vs) glDeleteShader(vs);
+			mUpscaleFailed = true;
+			return;
+		}
+		GLuint program = glCreateProgram();
+		glAttachShader(program, vs);
+		glAttachShader(program, fs);
+		glBindAttribLocation(program, VATTR_VERTEX, "PositionInProjection");
+		glBindAttribLocation(program, VATTR_TEXCOORD, "UV");
+		glLinkProgram(program);
+		glDeleteShader(vs);
+		glDeleteShader(fs);
+		GLint status = 0;
+		glGetProgramiv(program, GL_LINK_STATUS, &status);
+		if (status == GL_FALSE)
+		{
+			glDeleteProgram(program);
+			mUpscaleFailed = true;
+			return;
+		}
+		glUseProgram(program);
+		glUniform1i(glGetUniformLocation(program, "InputTexture"), 0);
+		mUpscaleProgram = program;
+	}
+
+	FGLPostProcessState savedState;
+	GLboolean stencilEnabled = glIsEnabled(GL_STENCIL_TEST);
+	glDisable(GL_STENCIL_TEST);
+
+	const float w = (float)mBuffers->GetWidth();
+	const float h = (float)mBuffers->GetHeight();
+	mBuffers->BindPPFB();
+	glViewport(0, 0, mBuffers->GetWidth(), mBuffers->GetHeight());
+	glClearColor(0.f, 0.f, 0.f, 1.f);
+	glClear(GL_COLOR_BUFFER_BIT);
+	glViewport(dst.left, dst.top, dst.width, dst.height);
+	mBuffers->BindCurrentTexture(0, linear ? GL_LINEAR : GL_NEAREST, GL_CLAMP_TO_EDGE);
+	glUseProgram(mUpscaleProgram);
+	glUniform4f(glGetUniformLocation(mUpscaleProgram, "SourceRect"), src.left / w, src.top / h, src.width / w, src.height / h);
+	RenderScreenQuad();
+	mBuffers->CopyPPToScene();
+
+	mBuffers->BindCurrentFB();
+	if (stencilEnabled) glEnable(GL_STENCIL_TEST);
+	glViewport(screen->mScreenViewport.left, screen->mScreenViewport.top, screen->mScreenViewport.width, screen->mScreenViewport.height);
+	static_cast<FGLRenderState *>(screen->RenderState())->ResetVertexBuffer();
 }
 
 

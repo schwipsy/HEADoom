@@ -22,6 +22,7 @@
 */
 
 
+#include <algorithm>
 #include "c_console.h"
 #include "c_dispatch.h"
 #include "v_video.h"
@@ -154,8 +155,66 @@ static bool switchfps;
 static uint64_t waitstart;
 EXTERN_CVAR(Bool, vid_fps)
 
+//==========================================================================
+//
+// benchfps <seconds> [label]: average frame rate over a stretch of play,
+// appended to fpsbench.txt (average fps, 1% low fps, average frame time).
+// Used to compare graphics settings.
+//
+//==========================================================================
+
+static uint64_t fpsBenchStart, fpsBenchLast, fpsBenchLength;
+static TArray<float> fpsBenchFrames;
+static FString fpsBenchLabel;
+
+static void CheckFpsBench()
+{
+	if (fpsBenchLength == 0)
+		return;
+	const uint64_t now = I_nsTime();
+	if (fpsBenchLast != 0)
+		fpsBenchFrames.Push((now - fpsBenchLast) / 1e6f);
+	fpsBenchLast = now;
+	if (now - fpsBenchStart < fpsBenchLength || fpsBenchFrames.Size() < 2)
+		return;
+
+	double total = 0;
+	for (float ms : fpsBenchFrames) total += ms;
+	TArray<float> sorted = fpsBenchFrames;
+	std::sort(sorted.begin(), sorted.end());
+	// 1% low: average of the slowest 1% of frames
+	const unsigned count = max(1u, sorted.Size() / 100);
+	double slow = 0;
+	for (unsigned i = 0; i < count; i++) slow += sorted[sorted.Size() - 1 - i];
+	slow /= count;
+
+	const double avgms = total / fpsBenchFrames.Size();
+	FString line;
+	line.Format("%s\tavg %.1f fps\t1%% low %.1f fps\t%.2f ms\t%u frames\n", fpsBenchLabel.GetChars(), 1000.0 / avgms, 1000.0 / slow, avgms, fpsBenchFrames.Size());
+	Printf("%s", line.GetChars());
+	FILE *f = fopen("fpsbench.txt", "at");
+	if (f != nullptr)
+	{
+		fputs(line.GetChars(), f);
+		fclose(f);
+	}
+	fpsBenchLength = 0;
+	fpsBenchFrames.Clear();
+}
+
+CCMD(benchfps)
+{
+	const double seconds = argv.argc() > 1 ? atof(argv[1]) : 10.0;
+	fpsBenchLabel = argv.argc() > 2 ? argv[2] : "bench";
+	fpsBenchFrames.Clear();
+	fpsBenchStart = I_nsTime();
+	fpsBenchLast = 0;
+	fpsBenchLength = (uint64_t)(max(1.0, seconds) * 1e9);
+}
+
 void CheckBench()
 {
+	CheckFpsBench();
 	if (printstats && ConsoleState == c_up)
 	{
 		// if we started the FPS counter ourselves or ran from the console

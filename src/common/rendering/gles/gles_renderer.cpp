@@ -91,6 +91,7 @@ FGLRenderer::~FGLRenderer()
 	if (mPresentShader) delete mPresentShader;
 	for (auto s : mCustomPostShaders) delete s;
 	DeleteGLESAmbientOcclusion(mSSAO);
+	if (mUpscaleProgram) glDeleteProgram(mUpscaleProgram);
 }
 
 //===========================================================================

@@ -81,8 +81,10 @@ void FGLRenderer::PostProcessScene(int fixedcm, float flash, const std::function
 
 void FGLRenderer::AmbientOccludeScene(float m5)
 {
-	int sceneWidth = mBuffers->GetSceneWidth();
-	int sceneHeight = mBuffers->GetSceneHeight();
+	// The scene size, not the buffer size: with a scaled-down 3D view the AO
+	// works at the scene's own resolution instead of the full screen's.
+	int sceneWidth = screen->mSceneViewport.width;
+	int sceneHeight = screen->mSceneViewport.height;
 
 	GLPPRenderState renderstate(mBuffers);
 	hw_postprocess.ssao.Render(&renderstate, m5, sceneWidth, sceneHeight);

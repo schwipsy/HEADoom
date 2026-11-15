@@ -460,8 +460,8 @@ static void SetFilter(GLuint tex, GLint filter)
 
 void FGLESAmbientOcclusion::Render(FGLRenderer *renderer, FGLRenderBuffers *buffers, float m5)
 {
-	const int sceneWidth = buffers->GetSceneWidth();
-	const int sceneHeight = buffers->GetSceneHeight();
+	const int sceneWidth = screen->mSceneViewport.width;	// the 3D view, scaled or not
+	const int sceneHeight = screen->mSceneViewport.height;
 	if (gl_ssao == 0 || sceneWidth <= 0 || sceneHeight <= 0 || hw_postprocess.ssao.IsDisabledForLevel())
 		return;
 	if (!buffers->HasSceneDepthTexture())
