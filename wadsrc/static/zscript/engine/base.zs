@@ -716,6 +716,17 @@ struct Steam native
 	native static String PersonaName();
 }
 
+// ACS entry points: ScriptCall("SteamACS", "Achievement", "ACH_NAME") etc.
+// ScriptCall only finds static functions on classes, hence this wrapper.
+class SteamACS abstract
+{
+	static void Achievement(String apiName) { Steam.Achievement(apiName); }
+	static void SetStat(String apiName, int value) { Steam.SetStat(apiName, value); }
+	static void AddStat(String apiName, int amount) { Steam.AddStat(apiName, amount); }
+	static void Store() { Steam.Store(); }
+	static int IsOnline() { return Steam.IsOnline() ? 1 : 0; }
+}
+
 struct CVar native
 {
 	enum ECVarType

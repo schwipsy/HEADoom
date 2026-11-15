@@ -1,0 +1,17 @@
+// Steam achievements and stats from ACS (Headcutter engine).
+// SPDX-License-Identifier: MIT
+//
+// Copy next to your scripts (or into ACC's include folder) and add:
+//   #include "hcsteam.acs"
+// Then, e.g.:
+//   SteamAchievement("ACH_FIRST_HEAD");
+//   SteamAddStat("STAT_KILLS", 1);
+//
+// Names are the API names from Steamworks (letters, digits, _ - .).
+// Every call is a no-op when the game is not started through Steam.
+
+function void SteamAchievement(str apiName)        { ScriptCall("SteamACS", "Achievement", apiName); }
+function void SteamSetStat(str apiName, int value) { ScriptCall("SteamACS", "SetStat", apiName, value); }
+function void SteamAddStat(str apiName, int amount){ ScriptCall("SteamACS", "AddStat", apiName, amount); }
+function void SteamStore(void)                     { ScriptCall("SteamACS", "Store"); }
+function int  SteamIsOnline(void)                  { return ScriptCall("SteamACS", "IsOnline"); }
