@@ -378,6 +378,7 @@ void FOBJModel::BuildVertexBuffer(FModelRenderer *renderer)
 	SetVertexBuffer(renderer->GetType(), vbuf);
 
 	FModelVertex *vertptr = vbuf->LockVertexBuffer(vbufsize);
+	ResetBounds();
 
 	for (unsigned int i = 0; i < surfaces.Size(); i++)
 	{
@@ -400,6 +401,7 @@ void FOBJModel::BuildVertexBuffer(FModelRenderer *renderer)
 				FVector3 nvec;
 
 				mdv->Set(curVvec.X, curVvec.Y, curVvec.Z, curUvec.X, curUvec.Y);
+				AddBoundVertex(curVvec.X, curVvec.Y, curVvec.Z);
 
 				if (nidx >= 0 && (unsigned int)nidx < norms.Size())
 				{
@@ -431,6 +433,7 @@ void FOBJModel::BuildVertexBuffer(FModelRenderer *renderer)
 		}
 		delete[] vertFaces;
 	}
+	FinishBounds();
 	vbuf->UnlockVertexBuffer();
 }
 

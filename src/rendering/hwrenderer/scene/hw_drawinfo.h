@@ -223,6 +223,7 @@ private:
 	void AddSpecialPortalLines(subsector_t * sub, sector_t * sector, linebase_t *line);
 	public:
 	void RenderThings(subsector_t * sub, sector_t * sector);
+	void MarkOccludedThings(sector_t * sector);
 	void RenderParticles(subsector_t *sub, sector_t *front);
 	void DoSubsector(subsector_t * sub);
 	int SetupLightsForOtherPlane(subsector_t * sub, FDynLightData &lightdata, const secplane_t *plane);

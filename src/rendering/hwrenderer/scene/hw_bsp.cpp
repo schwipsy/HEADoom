@@ -35,6 +35,9 @@
 #include "hw_walldispatcher.h"
 
 #include "p_visualthinker.h"
+#include "models.h"
+#include "r_state.h"
+#include "stats.h"
 
 #ifdef ARCH_IA32
 #include <immintrin.h>
@@ -45,6 +48,150 @@ CVAR(Bool, gl_multithread, true, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 EXTERN_CVAR(Float, r_actorspriteshadowdist)
 EXTERN_CVAR(Bool, r_radarclipper)
 EXTERN_CVAR(Bool, r_dithertransparency)
+
+// Size based cull distance. Things without +CUSTOMLOD ignore DistanceCheck and vanish at
+// factor * size, where size is the larger of the diameter and the height (or the mesh size
+// for models). Players, monsters, projectiles and +IGNORECULLING things are only culled
+// with +CUSTOMLOD.
+CVAR(Bool, gl_autolod, true, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+CVAR(Float, gl_autolod_factor, 25.f, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+CVAR(Float, gl_autolod_min, 256.f, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+CVAR(Float, gl_autolod_max, 3000.f, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+
+// Skip things whose whole outline is already covered by solid walls nearer to the view.
+CVAR(Bool, gl_occlude_things, true, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+
+static int thingsOccluded, thingsLodCulled;
+
+ADD_STAT(thingcull)
+{
+	FString out;
+	out.Format("Things skipped: %d hidden behind walls, %d by distance", thingsOccluded, thingsLodCulled);
+	return out;
+}
+
+//==========================================================================
+//
+// How far a thing's model reaches from its origin, in map units.
+// Returns false if it is not drawn as a model or the mesh size is not known yet.
+//
+//==========================================================================
+
+static bool GetModelReach(AActor *thing, double &reachXY, double &reachFull)
+{
+	if (thing->picnum.isValid()) return false;
+	FSpriteModelFrame *smf = FindModelFrame(thing, thing->sprite, thing->frame, !!(thing->flags & MF_DROPPED));
+	if (smf == nullptr || smf->isVoxel) return false;
+
+	double rxy = 0, rfull = 0;
+	auto add = [&](int id) -> bool
+	{
+		if (id < 0 || (unsigned)id >= Models.Size()) return true;
+		FModel *m = Models[id];
+		if (m->mBoundRadius < 0) return false;
+		rxy = max(rxy, (double)m->mBoundRadiusXY);
+		rfull = max(rfull, (double)m->mBoundRadius);
+		return true;
+	};
+	for (unsigned i = 0; i < smf->modelIDs.Size(); i++)
+	{
+		if (!add(smf->modelIDs[i])) return false;
+	}
+	DActorModelData *data = thing->modelData;
+	if (data != nullptr)
+	{
+		for (auto &mo : data->models)
+		{
+			if (!add(mo.modelID)) return false;
+		}
+	}
+	if (rfull <= 0) return false;
+
+	const unsigned flags = smf->getFlags(data);
+	const double hscale = max(fabs(smf->xscale), fabs(smf->yscale)) * fabs(thing->Scale.X);
+	const double fscale = max(hscale, fabs(smf->zscale) * fabs(thing->Scale.Y));
+	const double aScale = max(fabs(thing->Scale.X), fabs(thing->Scale.Y));
+	const double offXY = sqrt(smf->xoffset * smf->xoffset + smf->yoffset * smf->yoffset) * aScale;
+	const double offFull = sqrt(offXY * offXY + smf->zoffset * smf->zoffset * aScale * aScale);
+	double pivot = 0;
+	if (flags & (MDL_USEROTATIONCENTER | MDL_ROTATING))
+	{
+		pivot = 2 * sqrt(smf->rotationCenterX * smf->rotationCenterX + smf->rotationCenterY * smf->rotationCenterY + smf->rotationCenterZ * smf->rotationCenterZ);
+	}
+	const bool tilted = (flags & (MDL_USEACTORPITCH | MDL_USEACTORROLL | MDL_PITCHFROMMOMENTUM | MDL_ROTATING)) || smf->pitchoffset != 0 || smf->rolloffset != 0;
+
+	// The 1.25 covers pixel stretch correction and frame interpolation.
+	reachFull = (rfull * fscale + offFull) * 1.25 + pivot;
+	reachXY = tilted ? reachFull : (rxy * hscale + offXY) * 1.25 + pivot;
+	return true;
+}
+
+//==========================================================================
+//
+// Horizontal reach of a sprite from the thing's origin and its drawn height.
+//
+//==========================================================================
+
+static bool GetSpriteReach(AActor *thing, double &reachXY, double &height)
+{
+	FTextureID patch;
+	bool mirror;
+	if (thing->picnum.isValid()) patch = thing->picnum;
+	else if ((unsigned)thing->sprite < sprites.Size()) patch = sprites[thing->sprite].GetSpriteFrame(thing->frame, 0, nullAngle, &mirror);
+	if (!patch.isValid()) return false;
+	auto tex = TexMan.GetGameTexture(patch, false);
+	if (!tex || !tex->isValid()) return false;
+
+	const int type = thing->renderflags & RF_SPRITETYPEMASK;
+	auto r = tex->GetSpritePositioning(type == RF_FACESPRITE).GetSpriteRect();
+	const double sx = fabs(thing->Scale.X), sy = fabs(thing->Scale.Y);
+	const double half = max(fabs(r.left), fabs(r.left + r.width)) * sx + fabs(thing->SpriteOffset.X) * sx;
+	if (type == RF_FACESPRITE)
+	{
+		reachXY = half;
+	}
+	else
+	{
+		// wall and flat sprites lie in the world, so either side can point anywhere
+		reachXY = half + (fabs(r.top) + r.height) * sy;
+	}
+	height = r.height * sy;
+	return true;
+}
+
+//==========================================================================
+//
+// True if the thing is too far away to be drawn.
+//
+//==========================================================================
+
+static bool IsLodCulled(AActor *thing, const DVector3 &viewpos)
+{
+	double check;
+	if (!(thing->flags9 & MF9_CUSTOMLOD))
+	{
+		if (!gl_autolod || (thing->flags9 & MF9_IGNORECULLING) || thing->player != nullptr || (thing->flags3 & MF3_ISMONSTER) || (thing->flags & MF_MISSILE)) return false;
+
+		const double dist = (thing->Pos() - viewpos).LengthSquared();
+		const double minDist = gl_autolod_min;
+		if (dist < minDist * minDist) return false;
+
+		double size = max(thing->radius * 2, thing->Height);
+		double reachXY, reachFull;
+		if (GetModelReach(thing, reachXY, reachFull)) size = max(size, reachFull * 2);
+		check = clamp<double>(gl_autolod_factor * size, minDist, max<double>(minDist, gl_autolod_max));
+		if (dist < check * check) return false;
+	}
+	else
+	{
+		FIntCVar *cvar = thing->GetInfo()->distancecheck;
+		if (cvar == nullptr || *cvar < 0) return false;
+		check = (double)**cvar;
+		if ((thing->Pos() - viewpos).LengthSquared() < check * check) return false;
+	}
+	thingsLodCulled++;
+	return true;
+}
 
 // Distance culling, ported from LZDoom. 0 disables it.
 // The cvar is defined by the software renderer sources (r_opaque_pass.cpp).
@@ -618,16 +765,8 @@ void HWDrawInfo::RenderThings(subsector_t * sub, sector_t * sector)
 		thing->validcount = validcount;
 
 		if(Viewpoint.bDoOob && thing->Sector->isSecret() && thing->Sector->wasSecret() && !r_radarclipper) continue; // This covers things that are touching non-secret sectors
-		FIntCVar *cvar = thing->GetInfo()->distancecheck;
-		if (cvar != nullptr && *cvar >= 0)
-		{
-			double dist = (thing->Pos() - vp.Pos).LengthSquared();
-			double check = (double)**cvar;
-			if (dist >= check * check)
-			{
-				continue;
-			}
-		}
+		if (thing->occludedcount == validcount) continue;	// MarkOccludedThings found it hidden
+		if (IsLodCulled(thing, vp.Pos)) continue;
 		// If this thing is in a map section that's not in view it can't possibly be visible
 		if (CurrentMapSections[thing->subsector->mapsection])
 		{
@@ -651,16 +790,7 @@ void HWDrawInfo::RenderThings(subsector_t * sub, sector_t * sector)
 	for (msecnode_t *node = sec->sectorportal_thinglist; node; node = node->m_snext)
 	{
 		AActor *thing = node->m_thing;
-		FIntCVar *cvar = thing->GetInfo()->distancecheck;
-		if (cvar != nullptr && *cvar >= 0)
-		{
-			double dist = (thing->Pos() - vp.Pos).LengthSquared();
-			double check = (double)**cvar;
-			if (dist >= check * check)
-			{
-				continue;
-			}
-		}
+		if (IsLodCulled(thing, vp.Pos)) continue;
 
 		HWSprite sprite;
 
@@ -710,6 +840,56 @@ void HWDrawInfo::RenderParticles(subsector_t *sub, sector_t *front)
 	SetupSprite.Unclock();
 }
 
+
+//==========================================================================
+//
+// Marks the things touching this sector whose outline is fully covered by
+// the clipper. Must run on the main thread when the sector's first subsector
+// is reached and before that subsector's own lines are added: the BSP walks
+// front to back, so everything in the clipper then lies in front of every
+// part of the sector that has not been walked yet. Each thing is only judged
+// at the first sector it touches, which is also where RenderThings handles it.
+//
+//==========================================================================
+
+void HWDrawInfo::MarkOccludedThings(sector_t *sector)
+{
+	auto &clipper = *mClipper;
+	const DVector2 viewpos = Viewpoint.Pos.XY();
+
+	for (auto p = sector->touching_renderthings; p != nullptr; p = p->m_snext)
+	{
+		AActor *thing = p->m_thing;
+		if (thing->occlusioncheckcount == validcount) continue;
+		thing->occlusioncheckcount = validcount;
+		if (thing->Sector->PortalGroup != sector->PortalGroup) continue;
+		if (thing->flags9 & MF9_IGNORECULLING) continue;
+
+		double reach, extra;
+		if (!GetModelReach(thing, reach, extra) && !GetSpriteReach(thing, reach, extra)) continue;
+		const double touch = thing->RenderRadius();
+		// Things drawn much wider than the area they are linked into could show
+		// parts over sectors that were walked earlier, so leave those alone.
+		if (reach > touch * 3 + 64) continue;
+		reach = max(reach, touch) + thing->Vel.XY().Length() + 4;
+
+		const DVector2 center = thing->Pos().XY() + thing->WorldOffset.XY();
+		const DVector2 dir = center - viewpos;
+		const double len = dir.Length();
+		if (len <= reach * 1.05) continue;
+
+		// Offset the edge points so they span the circle's tangents, not just its width.
+		const double k = reach / sqrt(len * len - reach * reach);
+		const DVector2 side(-dir.Y * k, dir.X * k);
+		const angle_t right = clipper.PointToPseudoAngle(center.X - side.X, center.Y - side.Y);
+		const angle_t left = clipper.PointToPseudoAngle(center.X + side.X, center.Y + side.Y);
+		if (!clipper.SafeCheckRange(right, left))
+		{
+			thing->occludedcount = validcount;
+			thingsOccluded++;
+		}
+	}
+}
 
 //==========================================================================
 //
@@ -852,6 +1032,11 @@ void HWDrawInfo::DoSubsector(subsector_t * sub)
 			RenderParticles(sub, fakesector);
 			SetupSprite.Unclock();
 		}
+	}
+
+	if (gl_render_things && gl_occlude_things && !doOob && !Viewpoint.bDoOrtho && sector->validcount != validcount && sector->touching_renderthings)
+	{
+		MarkOccludedThings(sector);
 	}
 
 	AddLines(sub, fakesector);
@@ -1063,6 +1248,7 @@ void HWDrawInfo::RenderBSP(void *node, bool drawpsprites)
 	}
 
 	validcount++;	// used for processing sidedefs only once by the renderer.
+	if (mCurrentPortal == nullptr) thingsOccluded = thingsLodCulled = 0;
 
 	multithread = gl_multithread;
 	if (multithread)

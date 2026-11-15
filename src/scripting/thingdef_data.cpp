@@ -341,6 +341,8 @@ static FFlagDef ActorFlagDefs[]=
 	DEFINE_PROTECTED_FLAG(MF9, ISPUFF, AActor, flags9), //[AA] was spawned by SpawnPuff
 	DEFINE_FLAG(MF9, FORCESECTORDAMAGE, AActor, flags9),
 	DEFINE_FLAG(MF9, NOAUTOOFFSKULLFLY, AActor, flags9),
+	DEFINE_FLAG(MF9, CUSTOMLOD, AActor, flags9),
+	DEFINE_FLAG(MF9, IGNORECULLING, AActor, flags9),
 
 	// Effect flags
 	DEFINE_FLAG(FX, VISIBILITYPULSE, AActor, effects),

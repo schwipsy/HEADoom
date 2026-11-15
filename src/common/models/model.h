@@ -18,6 +18,7 @@
 #pragma once
 
 #include <stdint.h>
+#include <math.h>
 #include "textureid.h"
 #include "i_modelvertexbuffer.h"
 #include "matrix.h"
@@ -149,6 +150,21 @@ public:
 	void DestroyVertexBuffer();
 
 	bool hasSurfaces = false;
+
+	// Distance of the farthest vertex from the model origin, in model units. Filled in when the
+	// vertex buffer gets built; negative until then or for formats that do not report it.
+	// XY is the horizontal part only (FModelVertex x/z), Full includes the vertical axis.
+	float mBoundRadiusXY = -1.f;
+	float mBoundRadius = -1.f;
+	void ResetBounds() { mBoundRadiusXY = mBoundRadius = 0.f; }
+	void AddBoundVertex(float x, float up, float y)
+	{
+		float h = x * x + y * y;
+		float f = h + up * up;
+		if (h > mBoundRadiusXY) mBoundRadiusXY = h;
+		if (f > mBoundRadius) mBoundRadius = f;
+	}
+	void FinishBounds() { mBoundRadiusXY = sqrtf(mBoundRadiusXY); mBoundRadius = sqrtf(mBoundRadius); }
 
 	FString mFileName;
 	std::pair<FString, FString> mFilePath;

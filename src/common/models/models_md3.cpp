@@ -260,6 +260,7 @@ void FMD3Model::BuildVertexBuffer(FModelRenderer *renderer)
 		assert(vertptr != nullptr && indxptr != nullptr);
 
 		unsigned int vindex = 0, iindex = 0;
+		ResetBounds();
 
 		for (unsigned i = 0; i < Surfaces.Size(); i++)
 		{
@@ -275,6 +276,7 @@ void FMD3Model::BuildVertexBuffer(FModelRenderer *renderer)
 
 				int tc = j % surf->numVertices;
 				bvert->Set(vert->x, vert->z, vert->y, surf->Texcoords[tc].s, surf->Texcoords[tc].t);
+				AddBoundVertex(vert->x, vert->z, vert->y);
 				bvert->SetNormal(vert->nx, vert->nz, vert->ny);
 			}
 
@@ -287,6 +289,7 @@ void FMD3Model::BuildVertexBuffer(FModelRenderer *renderer)
 			}
 			surf->UnloadGeometry();
 		}
+		FinishBounds();
 		vbuf->UnlockVertexBuffer();
 		vbuf->UnlockIndexBuffer();
 	}

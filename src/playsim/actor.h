@@ -439,6 +439,8 @@ enum ActorFlag9
 	MF9_ISPUFF					= 0x00000040,	// [AA] Set on actors by P_SpawnPuff
 	MF9_FORCESECTORDAMAGE		= 0x00000080,	// [inkoalawetrust] Actor ALWAYS takes hurt floor damage if there's any. Even if the floor doesn't have SECMF_HURTMONSTERS.
 	MF9_NOAUTOOFFSKULLFLY		= 0x00000100,	// Don't automatically disable MF_SKULLFLY if velocity is 0.
+	MF9_CUSTOMLOD				= 0x00000200,	// Hardware renderer: use the DistanceCheck cvar instead of the automatic size-based cull distance.
+	MF9_IGNORECULLING			= 0x00000400,	// Hardware renderer: never hidden by the occlusion test or the automatic cull distance.
 };
 
 // --- mobj.renderflags ---
@@ -1332,6 +1334,8 @@ public:
 	struct portnode_t	*touching_lineportallist;		// and for cross-lineportal
 	struct msecnode_t	*touching_rendersectors; // this is the list of sectors that this thing interesects with it's max(radius, renderradius).
 	int validcount;
+	int occlusioncheckcount = 0;	// hardware renderer, main thread: validcount of the pass that last tested this actor for occlusion
+	int occludedcount = 0;			// hardware renderer: validcount of the pass in which this actor was found hidden
 
 
 	TObjPtr<AActor*>	Inventory;		// [RH] This actor's inventory
