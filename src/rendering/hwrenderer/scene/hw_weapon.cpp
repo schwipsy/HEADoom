@@ -536,6 +536,8 @@ bool HUDSprite::GetWeaponRect(HWDrawInfo *di, DPSprite *psp, float sx, float sy,
 	// handled here by multiplying SCREENWIDTH by 200 instead of
 	// 240, but now the baseScale var defines this from now on.
 	scale = psp->baseScale.Y * (SCREENHEIGHT*vw) / (SCREENWIDTH * 240.0f);
+	// A splitscreen view is a short, wide window: size the weapon to the view's height like an ultra-wide screen.
+	if (gSplitView.active) scale = psp->baseScale.Y * vh / 240.0f;
 
 	// Canvas textures are stored upside down
 	if (tex && tex->isHardwareCanvas()) scale *= -1;

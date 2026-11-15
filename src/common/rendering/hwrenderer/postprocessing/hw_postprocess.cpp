@@ -31,6 +31,10 @@
 
 #include "stats.h"
 
+// Set by the game while several splitscreen views share the frame; lens distortion
+// would bend all views as one image, so it is skipped then.
+bool hw_SplitscreenActive = false;
+
 Postprocess hw_postprocess;
 
 PPResource *PPResource::First = nullptr;
@@ -303,7 +307,7 @@ void PPBloom::ComputeBlurSamples(int sampleCount, float blurAmount, float *sampl
 
 void PPLensDistort::Render(PPRenderState *renderstate)
 {
-	if (gl_lens == 0)
+	if (gl_lens == 0 || hw_SplitscreenActive)
 	{
 		return;
 	}

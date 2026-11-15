@@ -17,6 +17,7 @@
 
 #include "gi.h"
 #include "g_splitscreen.h"
+extern bool hw_SplitscreenActive;
 #include "a_dynlight.h"
 #include "m_png.h"
 #include "doomstat.h"
@@ -377,6 +378,7 @@ static sector_t* RenderSplitViews(const int* locals, int count)
 	const float saved_ratio = r_viewwindow.WidescreenRatio;
 	sector_t* result = nullptr;
 	gSplitFrame.count = 0;
+	hw_SplitscreenActive = true;
 
 	for (int v = 0; v < count && v < SPLITSCREEN_MAXVIEWS; v++)
 	{
@@ -516,6 +518,7 @@ sector_t* RenderView(player_t* player)
 		else
 		{
 			gSplitFrame.count = 0;
+			hw_SplitscreenActive = false;
 			retsec = RenderViewpoint(r_viewpoint, player->camera, NULL, r_viewpoint.FieldOfView.Degrees(), ratio, fovratio, true, true);
 		}
 	}
