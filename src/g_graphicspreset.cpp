@@ -45,6 +45,7 @@ static const FPresetSetting PresetSettings[] =
 	// Ambient occlusion: the most expensive effect, but it also sets how dark the
 	// game looks, so every preset keeps it (Very Low uses the GLES version)
 	{ "gl_ssao",						{ "1", "1", "1", "2", "3" } },
+	{ "gl_ssao_portals",				{ "1", "1", "2", "3", "4" } },
 
 	// Dynamic light shadows
 	{ "gl_light_shadowmap",				{ "0", "0", "1", "1", "1" } },
