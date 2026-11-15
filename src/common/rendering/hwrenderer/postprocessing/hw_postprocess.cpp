@@ -644,6 +644,8 @@ void PPTonemap::Render(PPRenderState *renderstate)
 
 /////////////////////////////////////////////////////////////////////////////
 
+FSSAOViewFog ssaoViewFog;
+
 PPAmbientOcclusion::PPAmbientOcclusion()
 {
 	// Must match quality enum in PPAmbientOcclusion::DeclareShaders

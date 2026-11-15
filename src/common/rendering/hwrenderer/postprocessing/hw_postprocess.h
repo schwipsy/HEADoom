@@ -701,6 +701,16 @@ struct AmbientCombineUniforms
 	}
 };
 
+// Colored fog of the area the camera is in, for SSAO on backends without a
+// per-pixel fog buffer (GLES). Density 0 = no colored fog.
+struct FSSAOViewFog
+{
+	float Color[3] = {};
+	float Density = 0;		// as passed to the shaders' fog equation
+	bool Radial = false;
+};
+extern FSSAOViewFog ssaoViewFog;
+
 class PPAmbientOcclusion
 {
 public:

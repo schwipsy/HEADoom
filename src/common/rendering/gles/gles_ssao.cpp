@@ -86,6 +86,8 @@ uniform float NegInvR2;
 uniform float RadiusToScreen;
 uniform float AOMultiplier;
 uniform float AOStrength;
+uniform float FogDensity;
+uniform int FogRadial;
 
 #define PI 3.14159265358979323846
 
@@ -158,14 +160,17 @@ float ComputeAO(vec3 viewPosition, vec3 viewNormal)
 void main()
 {
 	float occlusion = 1.0;
+	float fogfactor = 1.0;	// 1 = no fog, 0 = all fog (same equation as the scene shaders)
 	if (SceneDepthRaw(TexCoord) < 1.0)
 	{
 		vec3 viewPosition = FetchViewPos(TexCoord);
 		vec3 viewNormal = ReconstructNormal(TexCoord, viewPosition);
 		if (viewNormal != vec3(0.0))
 			occlusion = ComputeAO(viewPosition, viewNormal) * AOStrength + (1.0 - AOStrength);
+		float fogdist = max(16.0, FogRadial != 0 ? length(viewPosition) : viewPosition.z);
+		fogfactor = exp2(FogDensity * fogdist);
 	}
-	FragColor = vec4(PackAO(occlusion), 0.0, 1.0);
+	FragColor = vec4(PackAO(occlusion), fogfactor, 1.0);
 }
 )";
 
@@ -199,7 +204,8 @@ void main()
 	vec2 stepUV = vec2(0.0, InvFullResolution.y);
 #endif
 	float centerDepth = LinearDepth(TexCoord);
-	float totalAO = UnpackAO(texture(AOTexture, TexCoord).xy);
+	vec4 center = texture(AOTexture, TexCoord);
+	float totalAO = UnpackAO(center.xy);
 	float totalW = 1.0;
 
 	AddSample(TexCoord - 3.0 * stepUV, 3.0, centerDepth, totalAO, totalW);
@@ -211,9 +217,9 @@ void main()
 
 	float fragAO = totalAO / totalW;
 #if defined(BLUR_HORIZONTAL)
-	FragColor = vec4(PackAO(fragAO), 0.0, 1.0);
+	FragColor = vec4(PackAO(fragAO), center.z, 1.0);
 #else
-	FragColor = vec4(PackAO(pow(clamp(fragAO, 0.0, 1.0), PowExponent)), 0.0, 1.0);
+	FragColor = vec4(PackAO(pow(clamp(fragAO, 0.0, 1.0), PowExponent)), center.z, 1.0);
 #endif
 }
 )";
@@ -221,12 +227,16 @@ void main()
 static const char *CombineSource = R"(
 uniform sampler2D AOTexture;
 uniform int DebugMode;
+uniform vec3 FogColor;
 
 void main()
 {
-	float attenuation = UnpackAO(texture(AOTexture, TexCoord).xy);
+	vec4 ao = texture(AOTexture, TexCoord);
+	float attenuation = UnpackAO(ao.xy);
+	// Occluded color: black up close, the fog color further into fog, so the
+	// AO fades out with distance in fog (as with the fog buffer elsewhere)
 	if (DebugMode == 0)
-		FragColor = vec4(0.0, 0.0, 0.0, 1.0 - attenuation);
+		FragColor = vec4(FogColor * (1.0 - ao.z), 1.0 - attenuation);
 	else
 		FragColor = vec4(attenuation, attenuation, attenuation, 1.0);
 }
@@ -522,6 +532,8 @@ void FGLESAmbientOcclusion::Render(FGLRenderer *renderer, FGLRenderBuffers *buff
 		glUniform1f(glGetUniformLocation(prog, "RadiusToScreen"), aoRadius * 0.5f / tanHalfFovy * aoHeight);
 		glUniform1f(glGetUniformLocation(prog, "AOMultiplier"), 1.0f / (1.0f - nDotVBias));
 		glUniform1f(glGetUniformLocation(prog, "AOStrength"), gl_ssao_strength);
+		glUniform1f(glGetUniformLocation(prog, "FogDensity"), ssaoViewFog.Density);
+		glUniform1i(glGetUniformLocation(prog, "FogRadial"), ssaoViewFog.Radial ? 1 : 0);
 		glActiveTexture(GL_TEXTURE2);
 		glBindTexture(GL_TEXTURE_2D, RandomTex[clamp((int)gl_ssao - 1, 0, 2)]);
 		glBindFramebuffer(GL_FRAMEBUFFER, AOFB[0]);
@@ -548,6 +560,7 @@ void FGLESAmbientOcclusion::Render(FGLRenderer *renderer, FGLRenderBuffers *buff
 		prog = Programs[PROG_COMBINE];
 		glUseProgram(prog);
 		glUniform1i(glGetUniformLocation(prog, "DebugMode"), (int)gl_ssao_debug);
+		glUniform3f(glGetUniformLocation(prog, "FogColor"), ssaoViewFog.Color[0], ssaoViewFog.Color[1], ssaoViewFog.Color[2]);
 		glActiveTexture(GL_TEXTURE2);
 		SetFilter(AOTex[0], GL_LINEAR);
 		buffers->BindSceneFB(true);

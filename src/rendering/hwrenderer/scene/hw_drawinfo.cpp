@@ -24,6 +24,7 @@
 #include "hw_portal.h"
 #include "hw_renderstate.h"
 #include "hw_drawinfo.h"
+#include "hwrenderer/postprocessing/hw_postprocess.h"
 #include "po_man.h"
 #include "models.h"
 #include "hw_clock.h"
@@ -1038,6 +1039,23 @@ void HWDrawInfo::DrawScene(int drawmode)
 
 	if (applySSAO && RenderState.GetPassType() == GBUFFER_PASS)
 	{
+		// Fog at the camera, for backends that blend SSAO into fog without a fog buffer
+		ssaoViewFog = {};
+		if (Viewpoint.sector && !(Level->flags & LEVEL_HASFADETABLE) && gl_fogmode != 0)
+		{
+			const FColormap &cm = Viewpoint.sector->Colormap;
+			PalEntry fogcolor = cm.FadeColor;
+			fogcolor.a = 0;
+			if (fogcolor != 0)
+			{
+				const float density = GetFogDensity(Level, lightmode, Viewpoint.sector->lightlevel, fogcolor, cm.FogDensity, cm.BlendFactor);
+				ssaoViewFog.Color[0] = fogcolor.r / 255.f;
+				ssaoViewFog.Color[1] = fogcolor.g / 255.f;
+				ssaoViewFog.Color[2] = fogcolor.b / 255.f;
+				ssaoViewFog.Density = density * (-1.442692f / 64000.f);
+				ssaoViewFog.Radial = gl_fogmode == 2;
+			}
+		}
 		screen->AmbientOccludeScene(VPUniforms.mProjectionMatrix.get()[5]);
 		screen->mViewpoints->Bind(RenderState, vpIndex);
 	}
