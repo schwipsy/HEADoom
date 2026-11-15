@@ -942,10 +942,22 @@ OptionValue VanillaTrans
 	3, "$OPTVAL_VTAVANILLA"
 }
 
+OptionValue GraphicsPresets
+{
+	0, "Custom"
+	1, "Very Low"
+	2, "Low"
+	3, "Medium"
+	4, "High"
+	5, "Max"
+}
+
 OptionMenu "VideoOptions" protected
 {
 	Title "$DSPLYMNU_TITLE"
 
+	Option "Graphics Preset",                vid_graphicspreset,    GraphicsPresets
+	StaticText " "
 	Submenu "$DSPLYMNU_GLOPT",                 OpenGLOptions
 	Submenu "$DSPLYMNU_SWOPT",                 SWROptions
 	Submenu "$DSPLYMNU_IMAGEADJUST",           ImageAdjustMenu,       0, false, vid_shadersupport
@@ -1116,6 +1128,8 @@ OptionMenu VideoModeMenu protected
 {
 	Title "$VIDMNU_TITLE"
 
+	Option "Graphics Preset",                vid_graphicspreset,    GraphicsPresets
+	StaticText " "
 	Option "$VIDMNU_PREFERBACKEND",  vid_preferbackend, PreferBackend
 	StaticText " "
 	IfOption(SWRender) {

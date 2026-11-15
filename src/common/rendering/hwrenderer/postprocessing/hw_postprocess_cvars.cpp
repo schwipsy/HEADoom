@@ -28,7 +28,7 @@
 // CVARs
 //
 //==========================================================================
-CVAR(Bool, gl_bloom, false, CVAR_ARCHIVE);
+CVAR(Bool, gl_bloom, true, CVAR_ARCHIVE);
 CUSTOM_CVAR(Float, gl_bloom_amount, 1.4f, CVAR_ARCHIVE)
 {
 	if (self < 0.1f) self = 0.1f;
@@ -45,7 +45,7 @@ CUSTOM_CVAR(Int, gl_tonemap, 0, CVAR_ARCHIVE)
 		self = 0;
 }
 
-CVAR(Bool, gl_lens, false, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+CVAR(Bool, gl_lens, true, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 
 CVAR(Float, gl_lens_k, -0.12f, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 CVAR(Float, gl_lens_kcube, 0.1f, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
@@ -59,7 +59,7 @@ CUSTOM_CVAR(Int, gl_fxaa, 0, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 	}
 }
 
-CUSTOM_CVAR(Int, gl_ssao, 0, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+CUSTOM_CVAR(Int, gl_ssao, 1, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 {
 	if (self < 0 || self > 3)
 		self = 0;

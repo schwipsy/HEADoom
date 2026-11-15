@@ -54,7 +54,7 @@ cycle_t IShadowMap::UpdateCycles;
 int IShadowMap::LightsProcessed;
 int IShadowMap::LightsShadowmapped;
 
-CVAR(Bool, gl_light_shadowmap, false, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+CVAR(Bool, gl_light_shadowmap, true, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 
 ADD_STAT(shadowmap)
 {
@@ -63,7 +63,7 @@ ADD_STAT(shadowmap)
 	return out;
 }
 
-CUSTOM_CVAR(Int, gl_shadowmap_quality, 1024, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+CUSTOM_CVAR(Int, gl_shadowmap_quality, 512, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 {
 	switch (self)
 	{

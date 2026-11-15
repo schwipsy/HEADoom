@@ -94,12 +94,32 @@ Win32GLVideo::Win32GLVideo()
 //
 //==========================================================================
 
+// OpenGL version of a plain context, read while setting up the pixel format
+// (0 when no OpenGL context could be made)
+static double DetectedGLVersion = 0;
+
 DFrameBuffer *Win32GLVideo::CreateFrameBuffer()
 {
 	SystemGLFrameBuffer *fb;
 
 #ifdef HAVE_GLES2
-	if (vid_preferbackend != BACKEND_OPENGL)
+	// The OpenGL renderer needs OpenGL 3.3. Without it (and when Vulkan failed
+	// and the OpenGL renderer can't take over) use the GLES renderer, which runs
+	// on OpenGL 2 class hardware, instead of stopping with an error.
+	bool useGLES = vid_preferbackend == BACKEND_OPENGLES;
+	const bool glUsable = DetectedGLVersion >= 3.3 - 0.01;
+	if (vid_preferbackend == BACKEND_VULKAN)
+	{
+		useGLES = !glUsable;
+		Printf("Using the %s renderer instead.\n", useGLES ? "GLES" : "OpenGL");
+	}
+	else if (vid_preferbackend == BACKEND_OPENGL && !glUsable && DetectedGLVersion > 0)
+	{
+		useGLES = true;
+		Printf(TEXTCOLOR_ORANGE "OpenGL %.1f found, the OpenGL renderer needs 3.3. Using the GLES renderer instead.\n", DetectedGLVersion);
+	}
+
+	if (useGLES)
 		fb = new OpenGLESRenderer::OpenGLFrameBuffer(m_hMonitor, vid_fullscreen);
 	else
 #endif
@@ -234,7 +254,17 @@ bool Win32GLVideo::SetPixelFormat()
 
 	myWglChoosePixelFormatARB = (PFNWGLCHOOSEPIXELFORMATARBPROC)zd_wglGetProcAddress("wglChoosePixelFormatARB");
 	myWglCreateContextAttribsARB = (PFNWGLCREATECONTEXTATTRIBSARBPROC)zd_wglGetProcAddress("wglCreateContextAttribsARB");
-	// any extra stuff here?
+
+	// Remember the OpenGL version for choosing the renderer (see CreateFrameBuffer)
+	if (hRC != nullptr)
+	{
+		HMODULE gl32 = GetModuleHandleW(L"opengl32.dll");
+		using GetStringFunc = const GLubyte *(WINAPI *)(GLenum);
+		auto getString = gl32 ? (GetStringFunc)GetProcAddress(gl32, "glGetString") : nullptr;
+		const char *glversion = getString ? (const char *)getString(GL_VERSION) : nullptr;
+		if (glversion != nullptr)
+			DetectedGLVersion = strtod(glversion, nullptr);
+	}
 
 	zd_wglMakeCurrent(NULL, NULL);
 	zd_wglDeleteContext(hRC);
