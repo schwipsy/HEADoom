@@ -415,6 +415,26 @@ void FGameTexture::CleanHardwareData(bool full)
 	for (auto mat : Material) if (mat) mat->DeleteDescriptors();
 }
 
+//===========================================================================
+//
+// Marks a texture that is drawn on the HUD or in 2D (menus, fonts, weapon
+// sprites and HUD models), which gl_texture_reduce must leave at full size.
+// If it was already uploaded reduced, the next use uploads it again.
+//
+//===========================================================================
+
+void FGameTexture::KeepFullSize()
+{
+	if (Base == nullptr || Base->bKeepFullSize)
+		return;
+	Base->bKeepFullSize = true;
+	if (Base->bReducedUpload)
+	{
+		Base->bReducedUpload = false;
+		CleanHardwareData(true);
+	}
+}
+
 
 //-----------------------------------------------------------------------------
 //

@@ -311,6 +311,75 @@ bool FTexture::ProcessData(unsigned char* buffer, int w, int h, bool ispatch)
 //
 //===========================================================================
 
+//===========================================================================
+//
+// gl_texture_reduce: halves large world textures (walls, flats, sprites and
+// model skins in the level) when they are uploaded, to save video memory.
+// 0 = off, 1 = textures larger than 512 pixels, 2 = larger than 256 pixels.
+// Anything drawn on the HUD or in 2D keeps its full size (see KeepFullSize).
+//
+//===========================================================================
+
+CUSTOM_CVAR(Int, gl_texture_reduce, 0, CVAR_ARCHIVE | CVAR_GLOBALCONFIG | CVAR_NOINITCALL)
+{
+	if (self < 0 || self > 2)
+	{
+		self = 0;
+		return;
+	}
+	TexMan.FlushAll();
+}
+
+// Uploads reduced so far and the memory they saved (for texreducestats)
+static unsigned ReducedCount;
+static uint64_t ReducedSavedBytes;
+
+CCMD(texreducestats)
+{
+	Printf("gl_texture_reduce %d: %u texture uploads halved, %.1f MB saved (before mipmaps)\n", *gl_texture_reduce, ReducedCount, ReducedSavedBytes / (1024. * 1024.));
+}
+
+// Box-filters a BGRA buffer to half size. Colors are weighted by alpha so
+// transparent pixels do not darken the edges of masked textures.
+static void HalveTextureBuffer(FTextureBuffer &buffer)
+{
+	const int w = buffer.mWidth, h = buffer.mHeight;
+	const int nw = (w + 1) / 2, nh = (h + 1) / 2;
+	const uint8_t *src = buffer.mBuffer;
+	uint8_t *dst = new uint8_t[nw * nh * 4];
+	for (int y = 0; y < nh; y++)
+	{
+		for (int x = 0; x < nw; x++)
+		{
+			unsigned sum[3] = { 0, 0, 0 }, alpha = 0;
+			for (int dy = 0; dy < 2; dy++)
+			{
+				const int sy = min(y * 2 + dy, h - 1);
+				for (int dx = 0; dx < 2; dx++)
+				{
+					const uint8_t *p = src + (sy * w + min(x * 2 + dx, w - 1)) * 4;
+					sum[0] += p[0] * p[3];
+					sum[1] += p[1] * p[3];
+					sum[2] += p[2] * p[3];
+					alpha += p[3];
+				}
+			}
+			uint8_t *o = dst + (y * nw + x) * 4;
+			for (int c = 0; c < 3; c++)
+				o[c] = alpha > 0 ? uint8_t((sum[c] + alpha / 2) / alpha) : 0;
+			o[3] = uint8_t((alpha + 2) / 4);
+		}
+	}
+	ReducedCount++;
+	ReducedSavedBytes += uint64_t(w) * h * 4 - uint64_t(nw) * nh * 4;
+	if (buffer.mFreeBuffer)
+		delete[] buffer.mBuffer;
+	buffer.mBuffer = dst;
+	buffer.mFreeBuffer = true;
+	buffer.mWidth = nw;
+	buffer.mHeight = nh;
+}
+
 FTextureBuffer FTexture::CreateTexBuffer(int translation, int flags)
 {
 	FTextureBuffer result;
@@ -403,6 +472,14 @@ FTextureBuffer FTexture::CreateTexBuffer(int translation, int flags)
 			if (flags & CTF_Upscale) CreateUpsampledTextureBuffer(result, !!isTransparent, checkonly);
 
 			if (!checkonly) ProcessData(result.mBuffer, result.mWidth, result.mHeight, false);
+
+			const int reduceAbove = gl_texture_reduce == 1 ? 512 : gl_texture_reduce == 2 ? 256 : 0;
+			if (!checkonly && reduceAbove > 0 && result.mBuffer != nullptr && !bKeepFullSize && !(flags & CTF_Upscale)
+				&& max(GetWidth(), GetHeight()) > reduceAbove)
+			{
+				HalveTextureBuffer(result);
+				bReducedUpload = true;
+			}
 		}
 	}
 	return result;

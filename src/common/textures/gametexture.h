@@ -357,6 +357,7 @@ public:
 	}
 
 	void CleanHardwareData(bool full = true);
+	void KeepFullSize();
 
 	void GetLayers(TArray<FTexture*>& layers)
 	{

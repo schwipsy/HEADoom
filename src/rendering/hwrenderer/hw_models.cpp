@@ -70,6 +70,7 @@ void FHWModelRenderer::EndDrawModel(FRenderStyle style, int smf_flags)
 
 void FHWModelRenderer::BeginDrawHUDModel(FRenderStyle style, const VSMatrix &objectToWorldMatrix, bool mirrored, int smf_flags)
 {
+	drawingHUDModel = true;
 	state.SetDepthFunc(DF_LEqual);
 	state.SetDepthClamp(true);
 
@@ -87,6 +88,7 @@ void FHWModelRenderer::BeginDrawHUDModel(FRenderStyle style, const VSMatrix &obj
 
 void FHWModelRenderer::EndDrawHUDModel(FRenderStyle style, int smf_flags)
 {
+	drawingHUDModel = false;
 	state.SetBoneIndexBase(-1);
 	state.EnableModelMatrix(false);
 
@@ -107,6 +109,7 @@ void FHWModelRenderer::SetInterpolation(double inter)
 
 void FHWModelRenderer::SetMaterial(FGameTexture *skin, bool clampNoFilter, FTranslationID translation)
 {
+	if (drawingHUDModel && skin != nullptr) skin->KeepFullSize();
 	state.SetMaterial(skin, UF_Skin, 0, clampNoFilter ? CLAMP_NOFILTER : CLAMP_NONE, translation, -1);
 	state.SetLightIndex(modellightindex);
 }

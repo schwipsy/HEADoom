@@ -210,6 +210,8 @@ protected:
 	bool Masked = false;			// Texture (might) have holes
 	bool bHasCanvas = false;
 	bool bHdr = false; 				// only canvas textures for now.
+	bool bKeepFullSize = false;		// drawn on the HUD or in 2D: never reduced by gl_texture_reduce
+	bool bReducedUpload = false;	// the current hardware copy was reduced by gl_texture_reduce
 	int8_t bTranslucent = -1;
 	int8_t areacount = 0;			// this is capped at 4 sections.
 

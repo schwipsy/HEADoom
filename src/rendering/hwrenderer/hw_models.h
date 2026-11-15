@@ -49,6 +49,7 @@ public:
 	void EndDrawHUDModel(FRenderStyle style, int smf_flags) override;
 	void SetInterpolation(double interpolation) override;
 	void SetMaterial(FGameTexture *skin, bool clampNoFilter, FTranslationID translation) override;
+	bool drawingHUDModel = false;
 	void DrawArrays(int start, int count) override;
 	void DrawElements(int numIndices, size_t offset) override;
 	void SetupFrame(FModel *model, unsigned int frame1, unsigned int frame2, unsigned int size, int boneStartIndex) override;

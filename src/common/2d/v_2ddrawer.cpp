@@ -447,6 +447,7 @@ void F2DDrawer::SetColorOverlay(PalEntry color, float alpha, PalEntry &vertexcol
 
 void F2DDrawer::AddTexture(FGameTexture* img, DrawParms& parms)
 {
+	if (img) img->KeepFullSize();
 	if (parms.style.BlendOp == STYLEOP_None) return;	// not supposed to be drawn.
 	assert(img && img->isValid());
 
@@ -612,6 +613,7 @@ void DShape2D::OnDestroy() {
 
 void F2DDrawer::AddShape(FGameTexture* img, DShape2D* shape, DrawParms& parms)
 {
+	if (img) img->KeepFullSize();
 	// bail if shape is null (shouldn't happen but it might)
 	if (!shape)
 		ThrowAbortException(X_OTHER, "shape is null");
@@ -742,6 +744,7 @@ void F2DDrawer::AddPoly(FGameTexture *texture, FVector2 *points, int npoints,
 		DAngle rotation, const FColormap &colormap, double alpha, double fadelevel,
 		uint32_t *indices, size_t indexcount)
 {
+	if (texture) texture->KeepFullSize();
 	RenderCommand poly;
 
 	poly.mType = DrawTypeTriangles;
@@ -822,6 +825,7 @@ void F2DDrawer::AddPoly(FGameTexture *texture, FVector2 *points, int npoints,
 
 void F2DDrawer::AddPoly(FGameTexture* img, FVector4* vt, size_t vtcount, const unsigned int* ind, size_t idxcount, FTranslationID translation, PalEntry color, FRenderStyle style, const IntRect* clip)
 {
+	if (img) img->KeepFullSize();
 	RenderCommand dg;
 
 	if (!img || !img->isValid()) return;
@@ -900,6 +904,7 @@ float F2DDrawer::GetClassicFlatScalarHeight()
 
 void F2DDrawer::AddFlatFill(int left, int top, int right, int bottom, FGameTexture *src, int local_origin, double flatscale, PalEntry color, ERenderStyle style)
 {
+	if (src) src->KeepFullSize();
 	float fU1, fU2, fV1, fV2;
 
 	RenderCommand dg;
