@@ -126,6 +126,11 @@ public:
 
 	void BindDitherTexture(int texunit);
 
+	// Second color buffer for custom post-process shaders (ping-pong with the scene buffer)
+	void BindPPFB();
+	void BindPPTexture(int index, int filter = GL_NEAREST, int wrap = GL_CLAMP_TO_EDGE);
+	void CopyPPToScene();
+
 	int GetWidth() const { return mWidth; }
 	int GetHeight() const { return mHeight; }
 
@@ -164,6 +169,10 @@ private:
 	bool mSceneUsesTextures = false;
 
 	PPGLTexture mDitherTexture;
+
+	PPGLTexture mPPTex;
+	PPGLFrameBuffer mPPFB;
+	void CreatePPBuffer();
 
 	static bool FailedCreate;
 

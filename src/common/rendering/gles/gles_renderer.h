@@ -61,6 +61,17 @@ namespace OpenGLESRenderer
 	class FPresent3DRowShader;
 	class FShadowMapShader;
 
+// A GLDEFS "PostProcess" shader compiled for the GLES backend.
+struct FGLESCustomPostShader
+{
+	GLuint Program = 0;
+	bool Failed = false;
+	TArray<FString> TextureNames;
+	TArray<GLuint> TextureHandles;
+	GLint LastInputLoc = -1, TimeLoc = -1, TimeDeltaLoc = -1, TimeGameLoc = -1;
+	~FGLESCustomPostShader();
+};
+
 class FGLRenderer
 {
 public:
@@ -91,6 +102,9 @@ public:
 	void PresentStereo();
 	void RenderScreenQuad();
 	void PostProcessScene(int fixedcm, float flash, const std::function<void()> &afterBloomDrawEndScene2D);
+	void RunCustomPostShaders(const char *target);
+	bool CompileCustomPostShader(int index, FGLESCustomPostShader &out);
+	TArray<FGLESCustomPostShader*> mCustomPostShaders;
 
 	void CopyToBackbuffer(const IntRect *bounds, bool applyGamma);
 	void DrawPresentTexture(const IntRect &box, bool applyGamma);

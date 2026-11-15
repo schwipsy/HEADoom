@@ -66,6 +66,8 @@ namespace OpenGLESRenderer
 		DeleteFrameBuffer(mSceneFB);
 		DeleteRenderBuffer(mSceneDepthStencilBuf);
 		DeleteRenderBuffer(mSceneStencilBuf);
+		DeleteFrameBuffer(mPPFB);
+		DeleteTexture(mPPTex);
 	}
 
 	void FGLRenderBuffers::DeleteTexture(PPGLTexture& tex)
@@ -370,6 +372,45 @@ namespace OpenGLESRenderer
 		mDitherTexture.Bind(1, GL_NEAREST, GL_REPEAT);
 	}
 
+
+	//==========================================================================
+	//
+	// Second color buffer for custom post-process shaders
+	//
+	//==========================================================================
+
+	void FGLRenderBuffers::CreatePPBuffer()
+	{
+		if (mPPTex && mPPTex.Width == mWidth && mPPTex.Height == mHeight)
+			return;
+		DeleteFrameBuffer(mPPFB);
+		DeleteTexture(mPPTex);
+		mPPTex = Create2DTexture("PPTexture", GL_RGBA, mWidth, mHeight);
+		mPPFB = CreateFrameBuffer("PPFB", mPPTex);
+	}
+
+	void FGLRenderBuffers::BindPPFB()
+	{
+		CreatePPBuffer();
+		mPPFB.Bind();
+	}
+
+	void FGLRenderBuffers::BindPPTexture(int index, int filter, int wrap)
+	{
+		CreatePPBuffer();
+		mPPTex.Bind(index, filter, wrap);
+	}
+
+	// Copies the post-process buffer back into the scene texture (no glBlitFramebuffer in GLES 2)
+	void FGLRenderBuffers::CopyPPToScene()
+	{
+		CreatePPBuffer();
+		mPPFB.Bind();
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, mSceneTex.handle);
+		glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, mWidth, mHeight);
+		glBindTexture(GL_TEXTURE_2D, 0);
+	}
 
 	//==========================================================================
 	//

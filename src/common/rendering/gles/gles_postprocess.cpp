@@ -36,8 +36,15 @@
 
 #include "hw_vrmodes.h"
 #include "v_draw.h"
+#include "i_time.h"
+#include "printf.h"
+#include "cmdlib.h"
+#include "filesystem.h"
+#include "texturemanager.h"
+#include "hwrenderer/postprocessing/hw_postprocessshader.h"
 
 extern bool vid_hdr_active;
+EXTERN_CVAR(Bool, gl_custompost)
 
 
 namespace OpenGLESRenderer
@@ -56,8 +63,292 @@ void FGLRenderer::PostProcessScene(int fixedcm, float flash, const std::function
 {
 #ifndef NO_RENDER_BUFFER
 	mBuffers->BindCurrentFB();
+	RunCustomPostShaders("beforebloom");
 #endif
 	if (afterBloomDrawEndScene2D) afterBloomDrawEndScene2D();
+#ifndef NO_RENDER_BUFFER
+	RunCustomPostShaders("scene");
+#endif
+}
+
+//-----------------------------------------------------------------------------
+//
+// GLDEFS "PostProcess" shaders on the GLES backend.
+//
+// The shader source gets a GLSL 1.00 (GLES 2 / GL 2) or GLSL 3.30 prolog, so a
+// shader written with the portable subset works on every backend. The image
+// ping-pongs between the scene buffer and a second buffer and ends up in the
+// scene buffer again.
+//
+//-----------------------------------------------------------------------------
+
+FGLESCustomPostShader::~FGLESCustomPostShader()
+{
+	if (Program != 0)
+		glDeleteProgram(Program);
+	for (auto h : TextureHandles)
+		if (h != 0)
+			glDeleteTextures(1, &h);
+}
+
+static GLuint CompileGLESShaderStage(GLenum type, const FString &code, const char *name)
+{
+	GLuint handle = glCreateShader(type);
+	const char *src = code.GetChars();
+	GLint len = (GLint)code.Len();
+	glShaderSource(handle, 1, &src, &len);
+	glCompileShader(handle);
+	GLint status = 0;
+	glGetShaderiv(handle, GL_COMPILE_STATUS, &status);
+	if (status == GL_FALSE)
+	{
+		static char log[4096];
+		GLsizei loglen = 0;
+		glGetShaderInfoLog(handle, sizeof(log), &loglen, log);
+		Printf(TEXTCOLOR_RED "Post-process shader '%s' does not compile on this renderer:\n%s\n", name, log);
+		glDeleteShader(handle);
+		return 0;
+	}
+	return handle;
+}
+
+bool FGLRenderer::CompileCustomPostShader(int index, FGLESCustomPostShader &out)
+{
+	const PostProcessShader &desc = PostProcessShaders[index];
+	// gles_force_glsl_v100 also forces GLSL 1.00 here (to test the GLES 2 path on desktop GL)
+	const char *version = gles.forceGLSLv100 ? "100" : gles.shaderVersionString;
+	const bool es100 = strcmp(version, "100") == 0;
+
+	int lump = fileSystem.CheckNumForFullName(desc.ShaderLumpName.GetChars());
+	if (lump == -1)
+	{
+		Printf(TEXTCOLOR_RED "Post-process shader '%s' not found\n", desc.ShaderLumpName.GetChars());
+		return false;
+	}
+
+	FString prolog;
+	prolog.Format("#version %s\n", version);
+	prolog += "#ifdef GL_ES\nprecision highp float;\nprecision highp int;\n#endif\n";
+
+	FString vp = prolog, fp = prolog;
+	if (es100)
+	{
+		vp += "attribute vec4 PositionInProjection;\nattribute vec2 UV;\nvarying vec2 TexCoord;\n";
+		fp += "#define texture texture2D\n#define FragColor gl_FragColor\nvarying vec2 TexCoord;\n";
+	}
+	else
+	{
+		vp += "in vec4 PositionInProjection;\nin vec2 UV;\nout vec2 TexCoord;\n";
+		fp += "in vec2 TexCoord;\nout vec4 FragColor;\n";
+	}
+	vp += "void main()\n{\n\tgl_Position = PositionInProjection;\n\tTexCoord = UV;\n}\n";
+
+	fp += "uniform sampler2D InputTexture;\n";
+	TMap<FString, FString>::ConstIterator itTex(desc.Textures);
+	TMap<FString, FString>::ConstPair *texPair;
+	while (itTex.NextPair(texPair))
+	{
+		fp.AppendFormat("uniform sampler2D %s;\n", texPair->Key.GetChars());
+		out.TextureNames.Push(texPair->Key);
+	}
+	fp += "uniform sampler2D LastInputTexture;\n";
+	fp += "uniform float InputTimeDelta;\nuniform float InputTime;\nuniform float InputTimeGame;\n";
+
+	TMap<FString, PostProcessUniformValue>::ConstIterator itUni(desc.Uniforms);
+	TMap<FString, PostProcessUniformValue>::ConstPair *uniPair;
+	while (itUni.NextPair(uniPair))
+	{
+		const char *type = nullptr;
+		switch (uniPair->Value.Type)
+		{
+		case PostProcessUniformType::Float: type = "float"; break;
+		case PostProcessUniformType::Int: type = "int"; break;
+		case PostProcessUniformType::Vec2: type = "vec2"; break;
+		case PostProcessUniformType::Vec3: type = "vec3"; break;
+		case PostProcessUniformType::Vec4: type = "vec4"; break;
+		default: break;
+		}
+		if (type)
+			fp.AppendFormat("uniform %s %s;\n", type, uniPair->Key.GetChars());
+	}
+	fp += "#line 1\n";
+	fp += GetStringFromLump(lump);
+
+	GLuint vs = CompileGLESShaderStage(GL_VERTEX_SHADER, vp, desc.ShaderLumpName.GetChars());
+	GLuint fs = vs ? CompileGLESShaderStage(GL_FRAGMENT_SHADER, fp, desc.ShaderLumpName.GetChars()) : 0;
+	if (!vs || !fs)
+	{
+		if (vs) glDeleteShader(vs);
+		return false;
+	}
+
+	GLuint program = glCreateProgram();
+	glAttachShader(program, vs);
+	glAttachShader(program, fs);
+	glBindAttribLocation(program, VATTR_VERTEX, "PositionInProjection");
+	glBindAttribLocation(program, VATTR_TEXCOORD, "UV");
+	glLinkProgram(program);
+	glDeleteShader(vs);
+	glDeleteShader(fs);
+	GLint status = 0;
+	glGetProgramiv(program, GL_LINK_STATUS, &status);
+	if (status == GL_FALSE)
+	{
+		static char log[4096];
+		GLsizei loglen = 0;
+		glGetProgramInfoLog(program, sizeof(log), &loglen, log);
+		Printf(TEXTCOLOR_RED "Post-process shader '%s' does not link on this renderer:\n%s\n", desc.ShaderLumpName.GetChars(), log);
+		glDeleteProgram(program);
+		return false;
+	}
+	out.Program = program;
+
+	// sampler units: 0 = input, 1.. = GLDEFS textures, then LastInputTexture
+	glUseProgram(program);
+	GLint loc = glGetUniformLocation(program, "InputTexture");
+	if (loc != -1) glUniform1i(loc, 0);
+	for (unsigned i = 0; i < out.TextureNames.Size(); i++)
+	{
+		loc = glGetUniformLocation(program, out.TextureNames[i].GetChars());
+		if (loc != -1) glUniform1i(loc, 1 + i);
+
+		GLuint handle = 0;
+		const FString *texName = desc.Textures.CheckKey(out.TextureNames[i]);
+		auto gtex = texName ? TexMan.GetGameTexture(TexMan.CheckForTexture(texName->GetChars(), ETextureType::Any), true) : nullptr;
+		if (gtex && gtex->isValid())
+		{
+			auto buffer = gtex->GetTexture()->CreateTexBuffer(0);
+			const int count = buffer.mWidth * buffer.mHeight;
+			TArray<uint8_t> pixels(count * 4, true);
+			for (int p = 0; p < count; p++)
+			{
+				pixels[p * 4] = buffer.mBuffer[p * 4 + 2];
+				pixels[p * 4 + 1] = buffer.mBuffer[p * 4 + 1];
+				pixels[p * 4 + 2] = buffer.mBuffer[p * 4];
+				pixels[p * 4 + 3] = buffer.mBuffer[p * 4 + 3];
+			}
+			glGenTextures(1, &handle);
+			glBindTexture(GL_TEXTURE_2D, handle);
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, buffer.mWidth, buffer.mHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels.Data());
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+			glBindTexture(GL_TEXTURE_2D, 0);
+		}
+		out.TextureHandles.Push(handle);
+	}
+	out.LastInputLoc = glGetUniformLocation(program, "LastInputTexture");
+	if (out.LastInputLoc != -1) glUniform1i(out.LastInputLoc, 1 + out.TextureNames.Size());
+	out.TimeLoc = glGetUniformLocation(program, "InputTime");
+	out.TimeDeltaLoc = glGetUniformLocation(program, "InputTimeDelta");
+	out.TimeGameLoc = glGetUniformLocation(program, "InputTimeGame");
+	return true;
+}
+
+void FGLRenderer::RunCustomPostShaders(const char *target)
+{
+	if (!gl_custompost || PostProcessShaders.Size() == 0)
+		return;
+
+	bool any = false;
+	for (auto &desc : PostProcessShaders)
+		if (desc.Enabled && desc.Target.CompareNoCase(target) == 0)
+			any = true;
+	if (!any)
+		return;
+
+	if (mCustomPostShaders.Size() != PostProcessShaders.Size())
+	{
+		for (auto s : mCustomPostShaders) delete s;
+		mCustomPostShaders.Clear();
+		for (unsigned i = 0; i < PostProcessShaders.Size(); i++)
+			mCustomPostShaders.Push(new FGLESCustomPostShader);
+	}
+
+	FGLPostProcessState savedState;
+	savedState.SaveTextureBindings(8);
+
+	const int width = mBuffers->GetWidth();
+	const int height = mBuffers->GetHeight();
+	const float time = static_cast<float>(screen->FrameTime / 1000.0);
+	const float timeDelta = static_cast<float>(GetDeltaTime());
+
+	bool inScene = true;	// where the current image is
+	for (unsigned i = 0; i < PostProcessShaders.Size(); i++)
+	{
+		const PostProcessShader &desc = PostProcessShaders[i];
+		if (!desc.Enabled || desc.Target.CompareNoCase(target) != 0)
+			continue;
+
+		FGLESCustomPostShader &sh = *mCustomPostShaders[i];
+		if (sh.Program == 0)
+		{
+			if (sh.Failed)
+				continue;
+			if (!CompileCustomPostShader(i, sh))
+			{
+				sh.Failed = true;
+				continue;
+			}
+		}
+
+		if (inScene)
+		{
+			mBuffers->BindPPFB();
+			mBuffers->BindCurrentTexture(0, GL_NEAREST, GL_CLAMP_TO_EDGE);
+		}
+		else
+		{
+			mBuffers->BindCurrentFB();
+			mBuffers->BindPPTexture(0, GL_NEAREST, GL_CLAMP_TO_EDGE);
+		}
+		for (unsigned t = 0; t < sh.TextureHandles.Size(); t++)
+		{
+			glActiveTexture(GL_TEXTURE1 + t);
+			glBindTexture(GL_TEXTURE_2D, sh.TextureHandles[t]);
+		}
+		if (sh.LastInputLoc != -1)
+		{
+			// no history buffer here: the previous image is the current input
+			if (inScene) mBuffers->BindCurrentTexture(1 + sh.TextureHandles.Size());
+			else mBuffers->BindPPTexture(1 + sh.TextureHandles.Size());
+		}
+		glActiveTexture(GL_TEXTURE0);
+
+		glUseProgram(sh.Program);
+		if (sh.TimeLoc != -1) glUniform1f(sh.TimeLoc, time);
+		if (sh.TimeDeltaLoc != -1) glUniform1f(sh.TimeDeltaLoc, timeDelta);
+		if (sh.TimeGameLoc != -1) glUniform1f(sh.TimeGameLoc, time);
+
+		TMap<FString, PostProcessUniformValue>::ConstIterator it(desc.Uniforms);
+		TMap<FString, PostProcessUniformValue>::ConstPair *pair;
+		while (it.NextPair(pair))
+		{
+			const GLint loc = glGetUniformLocation(sh.Program, pair->Key.GetChars());
+			if (loc == -1)
+				continue;
+			const double *v = pair->Value.Values;
+			switch (pair->Value.Type)
+			{
+			case PostProcessUniformType::Float: glUniform1f(loc, (float)v[0]); break;
+			case PostProcessUniformType::Int: glUniform1i(loc, (int)v[0]); break;
+			case PostProcessUniformType::Vec2: glUniform2f(loc, (float)v[0], (float)v[1]); break;
+			case PostProcessUniformType::Vec3: glUniform3f(loc, (float)v[0], (float)v[1], (float)v[2]); break;
+			case PostProcessUniformType::Vec4: glUniform4f(loc, (float)v[0], (float)v[1], (float)v[2], (float)v[3]); break;
+			default: break;
+			}
+		}
+
+		glViewport(0, 0, width, height);
+		RenderScreenQuad();
+		inScene = !inScene;
+	}
+
+	if (!inScene)
+		mBuffers->CopyPPToScene();
+	mBuffers->BindCurrentFB();
+	glViewport(screen->mScreenViewport.left, screen->mScreenViewport.top, screen->mScreenViewport.width, screen->mScreenViewport.height);
 }
 
 

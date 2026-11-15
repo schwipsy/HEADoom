@@ -89,6 +89,7 @@ FGLRenderer::~FGLRenderer()
 
 	if (mBuffers) delete mBuffers;
 	if (mPresentShader) delete mPresentShader;
+	for (auto s : mCustomPostShaders) delete s;
 }
 
 //===========================================================================
