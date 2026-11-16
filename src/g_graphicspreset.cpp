@@ -62,6 +62,9 @@ static const FPresetSetting PresetSettings[] =
 	// Sprite drop shadows: 0 off, 1 default, 2 always
 	{ "r_actorspriteshadow",			{ "0", "1", "2", "2", "2" } },
 
+	// Mirrors seen through another portal (stacked sectors, line portals)
+	{ "gl_mirror_nested",				{ "0", "0", "0", "0", "1" } },
+
 	{ "gl_texture_filter_anisotropic",	{ "2", "4", "8", "16", "16" } },
 
 	// Decals and particles

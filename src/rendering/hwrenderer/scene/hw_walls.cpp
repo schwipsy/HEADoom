@@ -204,6 +204,9 @@ CVAR(Bool, hw_npottest, false, 0)
 
 // Mirrors farther than this from the view are drawn as plain walls. 0 = no limit.
 CVAR(Float, gl_mirror_maxdist, 1000.f, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+// Mirrors seen through another portal (stacked sectors, line portals, skyboxes) are
+// drawn as walls unless this is set. They are expensive and rarely noticed.
+CVAR(Bool, gl_mirror_nested, false, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 
 static bool MirrorInRange(const seg_t *seg, const DVector3 &viewpos)
 {
@@ -1398,7 +1401,7 @@ void HWWall::DoTexture(HWWallDispatcher *di, int _type,seg_t * seg, int peg,
 	if (!SetWallCoordinates(seg, &tci, floatceilingref, topleft, topright, bottomleft, bottomright,
 							seg->sidedef->GetTextureXOffset(texpos), skew)) return;
 
-	if (seg->linedef->special == Line_Mirror && _type == RENDERWALL_M1S && gl_mirrors && !(di->Level->ib_compatflags & BCOMPATF_NOMIRRORS) && (di->di == nullptr || MirrorInRange(seg, di->di->Viewpoint.Pos)))
+	if (seg->linedef->special == Line_Mirror && _type == RENDERWALL_M1S && gl_mirrors && !(di->Level->ib_compatflags & BCOMPATF_NOMIRRORS) && (di->di == nullptr || ((gl_mirror_nested || di->di->mCurrentPortal == nullptr) && MirrorInRange(seg, di->di->Viewpoint.Pos))))
 	{
 		PutPortal(di, PORTALTYPE_MIRROR, -1);
 	}
