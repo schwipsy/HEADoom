@@ -26,7 +26,7 @@
 //
 // Online play (see netrelay.h):
 //   --host <players>           host a game; the game gets -host <players>
-//   --join <ip:port>           join the host's online address
+//   --join <steamid|ip:port>   join the host by their Steam ID (64-bit number)
 //   --net-local <port>         test transport: plain UDP on 127.0.0.1:<port>
 //   --log <file>               log file name (default steamlauncher.log)
 
@@ -194,7 +194,12 @@ static void Handle(const std::string &line, bool &quit)
 		std::string persona = gSteam ? SteamFriends()->GetPersonaName() : "";
 		for (char &ch : persona) if (ch == '\n' || ch == '\r') ch = ' ';
 		gPipe.Send(std::string("READY ") + (gSteam ? "1 " : "0 ") + persona);
-		if (gNet && gNet->Ready()) gPipe.Send("NETADDR " + gNet->Address());
+		if (gNet && gNet->Ready())
+		{
+			// Over Steam, friends join with our Steam ID; it never changes.
+			bool steamId = dynamic_cast<SteamIdTransport *>(gNet) != nullptr;
+			gPipe.Send("NETADDR " + (steamId ? std::to_string(SteamUser()->GetSteamID().ConvertToUint64()) : gNet->Address()));
+		}
 		return;
 	}
 	if (c == "QUIT") { quit = true; return; }
@@ -276,9 +281,17 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, LPWSTR, int)
 			gNet = new UdpTransport((uint16_t)netLocalPort);
 		else if (gSteam)
 		{
-			auto st = new SteamTransport;
+			auto st = new SteamIdTransport;
+			st->log = Log;
 			gNet = st;
-			for (int t = 0; t < 1500 && !st->Ready() && !st->Failed(); t++) { SteamAPI_RunCallbacks(); Sleep(10); }
+		}
+		// --join also takes the host's Steam ID (a long number, no dots).
+		if (!joinAddr.empty() && joinAddr.find_first_not_of(L"0123456789") == std::wstring::npos)
+		{
+			uint32_t ip = SteamIdToIP(_wcstoui64(joinAddr.c_str(), nullptr, 10));
+			wchar_t b[32];
+			swprintf_s(b, L"%u.%u.%u.%u:%u", ip >> 24, (ip >> 16) & 255, (ip >> 8) & 255, ip & 255, kSteamIdPort);
+			joinAddr = b;
 		}
 		if (!gNet || !gNet->Ready())
 		{
@@ -295,7 +308,9 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, LPWSTR, int)
 			if (gSteam)
 			{
 				SteamFriends()->SetRichPresence("status", "Hosting a game");
-				SteamFriends()->SetRichPresence("connect", ("--join " + gNet->Address()).c_str());
+				// Lets friends use "Join Game" / "Invite to Game" in the Steam friends list.
+				SteamFriends()->SetRichPresence("connect", ("--join " + std::to_string(SteamUser()->GetSteamID().ConvertToUint64())).c_str());
+				Log("net: host Steam ID %llu", SteamUser()->GetSteamID().ConvertToUint64());
 			}
 		}
 		else

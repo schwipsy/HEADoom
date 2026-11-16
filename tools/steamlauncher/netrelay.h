@@ -28,6 +28,7 @@
 #include "steam/isteamnetworkingsockets.h"
 #include "steam/isteamnetworkingutils.h"
 #include "steam/steamnetworkingfakeip.h"
+#include "steam/isteamnetworkingmessages.h"
 
 struct Transport
 {
@@ -61,8 +62,31 @@ public:
 	SteamTransport()
 	{
 		SteamNetworkingUtils()->InitRelayNetworkAccess();
+	}
+
+	// Call every ~10 ms until Ready() or Failed(). Waits for the relay network
+	// (asking for a FakeIP before it is up fails with result 2), then requests
+	// the FakeIP, retrying a few times.
+	int tries = 0, wait = 0;
+	void Tick()
+	{
+		if (port || failed) return;
+		if (wait > 0) { wait--; return; }
+		if (requested) return; // callback pending
+		SteamRelayNetworkStatus_t st;
+		ESteamNetworkingAvailability a = SteamNetworkingUtils()->GetRelayNetworkStatus(&st);
+		if (a != k_ESteamNetworkingAvailability_Current && tries == 0 && waitedRelay++ < 1000) return;
+		tries++;
 		requested = SteamNetworkingSockets()->BeginAsyncRequestFakeIP(1);
-		if (!requested) { failed = true; err = "FakeIP request refused"; }
+		if (!requested) Retry("FakeIP request refused");
+	}
+	int waitedRelay = 0;
+	void Retry(const std::string &why)
+	{
+		requested = false;
+		err = why;
+		if (tries >= 5) failed = true;
+		else wait = 200; // 2 s
 	}
 	~SteamTransport() override
 	{
@@ -104,14 +128,80 @@ inline void SteamTransport::OnFakeIP(SteamNetworkingFakeIPResult_t *r)
 {
 	if (r->m_eResult != k_EResultOK)
 	{
-		failed = true;
-		err = "FakeIP request failed (" + std::to_string((int)r->m_eResult) + ")";
+		Retry("FakeIP request failed (" + std::to_string((int)r->m_eResult) + ")");
 		return;
 	}
 	myIP = r->m_unIP;
 	myPort = r->m_unPorts[0];
 	port = SteamNetworkingSockets()->CreateFakeUDPPort(0);
 	if (!port) { failed = true; err = "CreateFakeUDPPort failed"; }
+}
+
+//--------------------------------------------------------------------------
+// Steam account transport: packets go to players by Steam account through
+// ISteamNetworkingMessages (relayed, no port forwarding, nothing to request
+// up front). The game still sees IPv4:port addresses: each player's address
+// is their 32-bit Steam account ID as the IP, with a fixed port. Everyone
+// derives the same address for the same player, so the host can hand guest
+// addresses to the other guests as usual.
+
+static const uint16_t kSteamIdPort = 5029;
+
+inline uint32_t SteamIdToIP(uint64_t id) { return CSteamID(id).GetAccountID(); }
+inline CSteamID IPToSteamId(uint32_t ip) { return CSteamID(ip, k_EUniversePublic, k_EAccountTypeIndividual); }
+
+class SteamIdTransport : public Transport
+{
+	STEAM_CALLBACK(SteamIdTransport, OnSessionRequest, SteamNetworkingMessagesSessionRequest_t);
+	STEAM_CALLBACK(SteamIdTransport, OnSessionFailed, SteamNetworkingMessagesSessionFailed_t);
+
+public:
+	SteamIdTransport()
+	{
+		SteamNetworkingUtils()->InitRelayNetworkAccess();
+		myIP = SteamIdToIP(SteamUser()->GetSteamID().ConvertToUint64());
+		myPort = kSteamIdPort;
+	}
+	bool Ready() override { return SteamNetworkingMessages() != nullptr; }
+	std::string Error() override { return "Steam networking is not available"; }
+
+	void Send(uint32_t ip, uint16_t, const uint8_t *data, int len) override
+	{
+		SteamNetworkingIdentity to;
+		to.SetSteamID(IPToSteamId(ip));
+		SteamNetworkingMessages()->SendMessageToUser(to, data, (uint32)len,
+			k_nSteamNetworkingSend_UnreliableNoNagle | k_nSteamNetworkingSend_AutoRestartBrokenSession, 0);
+	}
+
+	int Recv(uint32_t &ip, uint16_t &p, uint8_t *buf, int maxlen) override
+	{
+		SteamNetworkingMessage_t *msg = nullptr;
+		if (SteamNetworkingMessages()->ReceiveMessagesOnChannel(0, &msg, 1) != 1) return -1;
+		int len = 0;
+		CSteamID from = msg->m_identityPeer.GetSteamID();
+		if (from.IsValid() && msg->m_cbSize <= maxlen)
+		{
+			ip = from.GetAccountID();
+			p = kSteamIdPort;
+			memcpy(buf, msg->m_pData, msg->m_cbSize);
+			len = msg->m_cbSize;
+		}
+		msg->Release();
+		return len; // 0 = dropped, try again
+	}
+
+	void (*log)(const char *, ...) = nullptr;
+};
+
+inline void SteamIdTransport::OnSessionRequest(SteamNetworkingMessagesSessionRequest_t *r)
+{
+	SteamNetworkingMessages()->AcceptSessionWithUser(r->m_identityRemote);
+	if (log) log("net: session with %llu", r->m_identityRemote.GetSteamID64());
+}
+
+inline void SteamIdTransport::OnSessionFailed(SteamNetworkingMessagesSessionFailed_t *r)
+{
+	if (log) log("net: session with %llu failed: %s", r->m_info.m_identityRemote.GetSteamID64(), r->m_info.m_szEndDebug);
 }
 
 //--------------------------------------------------------------------------
