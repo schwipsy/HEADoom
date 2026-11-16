@@ -29,6 +29,168 @@
 #include "c_dispatch.h"
 #include "gamestate.h"
 #include "printf.h"
+#include "doomstat.h"
+#include "d_player.h"
+#include "g_game.h"
+#include "menu.h"
+#include "savegamemanager.h"
+#include "v_video.h"
+#include "engineerrors.h"
+#include "cmdlib.h"
+#include "m_misc.h"
+
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <shellapi.h>
+#endif
+
+// From v_video.cpp: called when vid_preferbackend changes while running
+extern void (*vid_backendChangedHook)(int backend);
+void G_DoSaveGame(bool okForQuicksave, bool forceQuicksave, FString filename, const char *description);
+DMenu *CreateMessageBoxMenu(DMenu *parent, const char *message, int messagemode, bool playsound, FName action, void (*handler)());
+
+//==========================================================================
+//
+// Renderer restart
+//
+// The renderer can't be switched while the game runs, so changing it offers
+// to restart: the game saves to a "rendererswitch" slot, starts a new copy of
+// itself with the same command line plus -loadgame, and quits. The player is
+// back where they were after a few seconds.
+//
+//==========================================================================
+
+static bool SuppressBackendPrompt;
+
+// BACKEND_* value of the renderer that is actually running
+static int RunningBackend()
+{
+	if (screen == nullptr) return vid_preferbackend;
+	switch (screen->Backend())
+	{
+	case 0: return BACKEND_OPENGLES;
+	case 1: return BACKEND_VULKAN;
+	default: return BACKEND_OPENGL;
+	}
+}
+
+#ifdef _WIN32
+static void QuoteArg(std::wstring &out, const wchar_t *arg)
+{
+	out += L'"';
+	for (const wchar_t *p = arg; *p; p++)
+	{
+		if (*p == L'"') out += L'\\';
+		out += *p;
+	}
+	out += L'"';
+}
+#endif
+
+static void RestartGame()
+{
+#ifdef _WIN32
+	FString saveFile;
+	if (gamestate == GS_LEVEL && !netgame && !demoplayback && usergame &&
+		players[consoleplayer].mo != nullptr && players[consoleplayer].health > 0)
+	{
+		saveFile = G_BuildSaveName("rendererswitch");
+		G_DoSaveGame(false, false, saveFile, "Renderer switch");
+		if (!FileExists(saveFile)) saveFile = "";
+	}
+	M_SaveDefaults(nullptr);
+
+	wchar_t exePath[MAX_PATH];
+	GetModuleFileNameW(nullptr, exePath, MAX_PATH);
+
+	// Same arguments as this run, minus an old -loadgame
+	std::wstring cmd;
+	QuoteArg(cmd, exePath);
+	int argc = 0;
+	wchar_t **argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+	for (int i = 1; argv != nullptr && i < argc; i++)
+	{
+		if (_wcsicmp(argv[i], L"-loadgame") == 0)
+		{
+			i++;
+			continue;
+		}
+		cmd += L' ';
+		QuoteArg(cmd, argv[i]);
+	}
+	if (argv != nullptr) LocalFree(argv);
+	if (saveFile.IsNotEmpty())
+	{
+		cmd += L" -loadgame ";
+		QuoteArg(cmd, L"rendererswitch");	// -loadgame looks in the save folder
+	}
+
+	STARTUPINFOW si = { sizeof(si) };
+	PROCESS_INFORMATION pi = {};
+	if (!CreateProcessW(exePath, cmd.data(), nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi))
+	{
+		Printf(TEXTCOLOR_RED "Could not restart the game. Please restart it by hand.\n");
+		return;
+	}
+	CloseHandle(pi.hThread);
+	CloseHandle(pi.hProcess);
+	throw CExitEvent(0);
+#else
+	Printf("Please restart the game to use the new renderer.\n");
+#endif
+}
+
+static const char *PotatoText =
+	"POTATO MODE\n\n"
+	"The GLES renderer is the game's potato mode. "
+	"It runs on almost anything, but some shaders and effects "
+	"are lost and the game will look simpler than intended.";
+
+// Shows the restart prompt (and the potato mode warning when GLES is picked)
+static void PromptRendererChange(int backend)
+{
+	if (gamestate == GS_STARTUP)
+		return;
+	if (menuactive == MENU_Off || CurrentMenu == nullptr)
+	{
+		if (backend != RunningBackend()) Printf("Changing the renderer requires a restart.\n");
+		return;
+	}
+	const bool needsRestart = backend != RunningBackend();
+	const bool potato = backend == BACKEND_OPENGLES;
+	if (!needsRestart && !potato)
+		return;
+
+	FString text;
+	if (potato) text = PotatoText;
+	if (needsRestart)
+	{
+		if (text.IsNotEmpty()) text += "\n\n";
+		text += "The renderer change needs a restart. ";
+		if (netgame) text += "Restart the game to use it.";
+		else text += "Restart now? You will be back where you are.";
+	}
+	const bool ask = needsRestart && !netgame;
+	auto restart = []()
+	{
+		M_ClearMenus();
+		RestartGame();
+	};
+	DMenu *box = CreateMessageBoxMenu(CurrentMenu, text.GetChars(), ask ? 0 : 1, false, NAME_None, ask ? +restart : nullptr);
+	M_ActivateMenu(box);
+}
+
+static void OnBackendChanged(int backend)
+{
+	if (!SuppressBackendPrompt)
+		PromptRendererChange(backend);
+}
+
+static struct FBackendHookInstaller
+{
+	FBackendHookInstaller() { vid_backendChangedHook = OnBackendChanged; }
+} BackendHookInstaller;
 
 struct FPresetSetting
 {
@@ -96,19 +258,17 @@ static void ApplyGraphicsPreset(int preset)
 
 	// Very Low runs on the GLES renderer (the lightest one); the other presets
 	// move back to Vulkan if GLES was picked by Very Low. Takes effect on restart.
-	FBaseCVar *backend = FindCVar("vid_preferbackend", nullptr);
-	if (backend != nullptr)
+	const int current = vid_preferbackend;
+	const int wanted = preset == 1 ? BACKEND_OPENGLES : (current == BACKEND_OPENGLES ? BACKEND_VULKAN : current);
+	if (wanted != current)
 	{
-		const int current = backend->GetGenericRep(CVAR_Int).Int;
-		const int wanted = preset == 1 ? 2 : (current == 2 ? 1 : current);
-		if (wanted != current)
-		{
-			UCVarValue value;
-			value.Int = wanted;
-			backend->SetGenericRep(value, CVAR_Int);
-			Printf("The renderer change takes effect after restarting the game.\n");
-		}
+		SuppressBackendPrompt = true;
+		vid_preferbackend = wanted;
+		SuppressBackendPrompt = false;
 	}
+	// Very Low always shows the potato mode warning, even when already on GLES
+	if (wanted != current || preset == 1)
+		PromptRendererChange(wanted);
 }
 
 // 0 = Custom (nothing applied), 1 = Very Low ... 5 = Max. The defaults of the
