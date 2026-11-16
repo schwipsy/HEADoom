@@ -347,6 +347,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, LPWSTR, int)
 	if (online) timeBeginPeriod(1);
 	std::vector<uint8_t> pkt(65536);
 	unsigned long long sent = 0, recvd = 0;
+	bool gameOnPipe = false;
 	bool quit = false, pipeOpen = true;
 	while (!quit)
 	{
@@ -355,10 +356,19 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, LPWSTR, int)
 		if (gNet)
 		{
 			uint32_t ip; uint16_t port; const uint8_t *data; int n;
+			if (!gameOnPipe && netPipe.Connected()) { gameOnPipe = true; Log("netpipe: game connected"); }
 			while ((n = netPipe.Read(ip, port, data)) >= 0)
-				if (n > 0) { gNet->Send(ip, port, data, n); sent++; }
+				if (n > 0)
+				{
+					if (sent < 5) Log("net: send %d bytes to %u.%u.%u.%u:%u, type %02x", n, ip >> 24, (ip >> 16) & 255, (ip >> 8) & 255, ip & 255, port, n > 4 ? data[4] : 0);
+					gNet->Send(ip, port, data, n); sent++;
+				}
 			while ((n = gNet->Recv(ip, port, pkt.data(), (int)pkt.size())) >= 0)
-				if (n > 0) { netPipe.Write(ip, port, pkt.data(), n); recvd++; }
+				if (n > 0)
+				{
+					if (recvd < 5) Log("net: recv %d bytes from %u.%u.%u.%u:%u, type %02x%s", n, ip >> 24, (ip >> 16) & 255, (ip >> 8) & 255, ip & 255, port, n > 4 ? pkt[4] : 0, gameOnPipe ? "" : " (game not on pipe yet, dropped)");
+					netPipe.Write(ip, port, pkt.data(), n); recvd++;
+				}
 		}
 		if (pipeOpen)
 		{
