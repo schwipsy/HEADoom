@@ -265,8 +265,13 @@ float ViewportPixelAspect()
 void R_ShowCurrentScaling()
 {
 	int x1 = screen->GetClientWidth(), y1 = screen->GetClientHeight(), x2 = ViewportScaledWidth(x1, y1), y2 = ViewportScaledHeight(x1, y1);
+	// Headcutter: vid_scalefactor only scales the 3D scene, so show that size
+	// (not ViewportSceneScale(), which reads 1 while the video menu is open)
+	const float scene = clamp((float)vid_scalefactor, 0.05f, 1.f);
+	x2 = max(1, (int)(x2 * scene));
+	y2 = max(1, (int)(y2 * scene));
 	Printf("Current vid_scalefactor: %f\n", (float)(vid_scalefactor));
-	Printf("Real resolution: %i x %i\nEmulated resolution: %i x %i\n", x1, y1, x2, y2);
+	Printf("Real resolution: %i x %i\n3D resolution: %i x %i\n", x1, y1, x2, y2);
 }
 
 CCMD (vid_showcurrentscaling)
