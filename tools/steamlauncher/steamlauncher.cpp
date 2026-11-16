@@ -28,6 +28,7 @@
 //   --host <players>           host a game; the game gets -host <players>
 //   --join <steamid|ip:port>   join the host by their Steam ID (64-bit number)
 //   --net-local <port>         test transport: plain UDP on 127.0.0.1:<port>
+//   --net-lag <ms>             test option: delay incoming packets by <ms>
 //   --log <file>               log file name (default steamlauncher.log)
 
 #include "netrelay.h"
@@ -36,6 +37,7 @@
 #include <share.h>
 #include <string>
 #include <vector>
+#include <deque>
 #include <cstdio>
 #include <cstdarg>
 #include <cctype>
@@ -250,7 +252,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, LPWSTR, int)
 	LPWSTR *argv = CommandLineToArgvW(GetCommandLineW(), &argc);
 	std::wstring game = dir + L"\\HEADCUTTER.exe";
 	std::wstring args, logName = L"steamlauncher.log", hostCount, joinAddr;
-	int netLocalPort = 0;
+	int netLocalPort = 0, netLag = 0;
 	for (int i = 1; i < argc; i++)
 	{
 		if (!wcscmp(argv[i], L"--game") && i + 1 < argc) { game = argv[++i]; continue; }
@@ -258,6 +260,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, LPWSTR, int)
 		if (!wcscmp(argv[i], L"--host") && i + 1 < argc) { hostCount = argv[++i]; continue; }
 		if (!wcscmp(argv[i], L"--join") && i + 1 < argc) { joinAddr = argv[++i]; continue; }
 		if (!wcscmp(argv[i], L"--net-local") && i + 1 < argc) { netLocalPort = _wtoi(argv[++i]); continue; }
+		if (!wcscmp(argv[i], L"--net-lag") && i + 1 < argc) { netLag = _wtoi(argv[++i]); continue; }
 		args += L" " + Quote(argv[i]);
 	}
 	LocalFree(argv);
@@ -348,6 +351,8 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, LPWSTR, int)
 	std::vector<uint8_t> pkt(65536);
 	unsigned long long sent = 0, recvd = 0;
 	bool gameOnPipe = false;
+	struct Lagged { ULONGLONG due; uint32_t ip; uint16_t port; std::vector<uint8_t> data; };
+	std::deque<Lagged> lagged;
 	bool quit = false, pipeOpen = true;
 	while (!quit)
 	{
@@ -367,8 +372,17 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, LPWSTR, int)
 				if (n > 0)
 				{
 					if (recvd < 5) Log("net: recv %d bytes from %u.%u.%u.%u:%u, type %02x%s", n, ip >> 24, (ip >> 16) & 255, (ip >> 8) & 255, ip & 255, port, n > 4 ? pkt[4] : 0, gameOnPipe ? "" : " (game not on pipe yet, dropped)");
-					netPipe.Write(ip, port, pkt.data(), n); recvd++;
+					if (netLag > 0) lagged.push_back({ GetTickCount64() + netLag, ip, port, std::vector<uint8_t>(pkt.begin(), pkt.begin() + n) });
+					else netPipe.Write(ip, port, pkt.data(), n);
+					recvd++;
 				}
+			// --net-lag test option: hold incoming packets to fake a slow connection.
+			while (!lagged.empty() && lagged.front().due <= GetTickCount64())
+			{
+				auto &l = lagged.front();
+				netPipe.Write(l.ip, l.port, l.data.data(), (int)l.data.size());
+				lagged.pop_front();
+			}
 		}
 		if (pipeOpen)
 		{
