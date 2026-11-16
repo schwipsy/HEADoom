@@ -29,6 +29,7 @@
 #include "p_spec.h"
 #include "g_levellocals.h"
 #include "vm.h"
+#include "d_player.h"
 #include <vector>
 
 DEFINE_FIELD(FSectorPortal, mType);
@@ -857,10 +858,13 @@ static DVector2 SectorCenter(const sector_t *sec)
 	return sec->Lines.Size() ? c / sec->Lines.Size() : c;
 }
 
+CVAR(Bool, portal_splitgroups, true, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)	// applies on map load
+
 static int SplitMismatchedPortalGroups(FLevelLocals *Level, TArray<FSectorPortal *> &orgs, int id, std::vector<int> &family)
 {
 	auto root = [&](int g) { while (g < (int)family.size() && family[g] != g) g = family[g]; return g; };
 	for (int g = (int)family.size(); g < id; g++) family.push_back(g);
+	if (!portal_splitgroups) return id;
 
 	for (int pass = 0; pass < 32; pass++)
 	{
@@ -1300,4 +1304,33 @@ bool FLevelLocals::CollectConnectedGroups(int startgroup, const DVector3 &positi
 		}
 	}
 	return retval;
+}
+
+//============================================================================
+//
+// dumpsectorportals: lists linked sector portals and the player's sector state
+//
+//============================================================================
+
+CCMD(dumpsectorportals)
+{
+	auto Level = primaryLevel;
+	for (unsigned i = 0; i < Level->sectorPortals.Size(); i++)
+	{
+		auto &p = Level->sectorPortals[i];
+		if (p.mOrigin == nullptr || p.mDestination == nullptr) continue;
+		Printf("portal %u: type %d plane %d sectors %d -> %d groups %d -> %d disp (%.2f, %.2f) planez %.2f\n", i, p.mType, p.mPlane,
+			p.mOrigin->sectornum, p.mDestination->sectornum, p.mOrigin->PortalGroup, p.mDestination->PortalGroup,
+			p.mDisplacement.X, p.mDisplacement.Y, p.mPlaneZ);
+	}
+	if (players[consoleplayer].mo)
+	{
+		auto sec = players[consoleplayer].mo->Sector;
+		for (int j = 0; j < 2; j++)
+		{
+			Printf("player sector %d group %d %s: portal %u type %d flags %x portalz %.2f planez %.2f\n", sec->sectornum, sec->PortalGroup,
+				j ? "ceiling" : "floor", sec->Portals[j], sec->GetPortalType(j), sec->planes[j].Flags,
+				sec->GetPortalType(j) ? sec->GetPortalPlaneZ(j) : 0., sec->GetPlaneTexZ(j));
+		}
+	}
 }

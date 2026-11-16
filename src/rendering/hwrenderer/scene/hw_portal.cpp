@@ -158,6 +158,16 @@ bool FPortalSceneState::RenderFirstSkyPortal(int recursion, HWDrawInfo *outer_di
 			// Cannot clear the depth buffer inside a portal recursion
 			if (recursion && p->NeedDepthBuffer()) continue;
 
+			// A portal drawn before the scene has its depth cleared afterwards, like a sky.
+			// With ambient occlusion on, the outer view's AO pass would then read "far" depth
+			// over the portal's contents and veil them. Draw ambient-occluded scene portals
+			// (floor/ceiling stacks, AO skyboxes) after the scene instead, as usual.
+			if (state.GetPassType() == GBUFFER_PASS)
+			{
+				const int type = p->GetHWPortalType();
+				if (type == HWP_SECTORSTACK || (type == HWP_SKYBOX && (outer_di->Level->flags3 & LEVEL3_SKYBOXAO))) continue;
+			}
+
 			if (!best || p->lines.Size() > best->lines.Size())
 			{
 				best = p;
