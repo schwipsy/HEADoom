@@ -286,6 +286,53 @@ CUSTOM_CVAR(Int, vid_graphicspreset, 3, CVAR_ARCHIVE | CVAR_GLOBALCONFIG | CVAR_
 	ApplyGraphicsPreset(self);
 }
 
+// Settings of the preset that differ from what is set now (nullptr = none).
+// Values are compared as numbers, since the cvars store them in their own format.
+static const char *FirstPresetMismatch(int preset, FString *current = nullptr)
+{
+	for (const auto &setting : PresetSettings)
+	{
+		FBaseCVar *cvar = FindCVar(setting.CVar, nullptr);
+		if (cvar == nullptr)
+			continue;
+		const double want = atof(setting.Values[preset - 1]);
+		const double have = cvar->GetGenericRep(CVAR_Float).Float;
+		if (fabs(want - have) > 0.001)
+		{
+			if (current) *current = cvar->GetHumanString();
+			return setting.CVar;
+		}
+	}
+	// Very Low means the GLES renderer, the others any other renderer
+	if ((preset == 1) != (vid_preferbackend == BACKEND_OPENGLES))
+	{
+		if (current) current->Format("%d", *vid_preferbackend);
+		return "vid_preferbackend";
+	}
+	return nullptr;
+}
+
+// Runs every tic: once a setting the preset controls is changed by hand (menu,
+// console or a mod), the preset shows as Custom.
+void G_GraphicsPresetTicker()
+{
+	if (gamestate == GS_STARTUP || vid_graphicspreset < 1 || vid_graphicspreset > 5)
+		return;
+	if (FirstPresetMismatch(vid_graphicspreset) != nullptr)
+		vid_graphicspreset = 0;
+}
+
+CCMD(vid_presetmismatch)
+{
+	for (int i = 1; i <= 5; i++)
+	{
+		FString cur;
+		const char *name = FirstPresetMismatch(i, &cur);
+		if (name) Printf("preset %d: %s is %s\n", i, name, cur.GetChars());
+		else Printf("preset %d: matches\n", i);
+	}
+}
+
 CCMD(vid_listpresetsettings)
 {
 	static const char *names[] = { "Very Low", "Low", "Medium", "High", "Max" };

@@ -41,6 +41,7 @@ extern uint8_t globalfreeze, globalchangefreeze;
 void C_Ticker();
 void M_Ticker();
 void D_RunCutscene();
+void G_GraphicsPresetTicker();
 
 //==========================================================================
 //
@@ -57,6 +58,7 @@ void P_RunClientSideLogic()
 	C_Ticker();
 	M_Ticker();
 	G_SplitMenuTicker();
+	G_GraphicsPresetTicker();
 
 	// [ZZ] also tick the UI part of the events
 	primaryLevel->localEventManager->UiTick();
