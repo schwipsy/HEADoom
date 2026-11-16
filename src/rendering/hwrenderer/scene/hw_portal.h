@@ -92,6 +92,7 @@ public:
 	TArray<HWWall> lines;
 	BoundingRect boundingBox;
 	int planesused = 0;
+	bool ssaoGranted = false;	// reserved one of the gl_ssao_portals slots (main view only)
 	unsigned occlusionQuery = 0;	// when set, SetupStencil counts the portal's visible pixels into this query
 	float zshift = 0.1f; 	// HWPlaneMirrorPortal::DrawPortalStencil() z-fights with flats unless zshift >= 0.1
 	HWFlat flat;
@@ -117,6 +118,9 @@ public:
 	virtual void DrawPortalStencil(FRenderState &state, int pass);
 	void SetupStencil(HWDrawInfo *di, FRenderState &state, bool usestencil);
 	void RemoveStencil(HWDrawInfo *di, FRenderState &state, bool usestencil);
+
+	// Rough on-screen size: area x facing / distance^2, summed over the portal's pieces
+	double ScreenWeight(const DVector3 &viewpos);
 
 	void AddLine(HWWall * l)
 	{
@@ -144,6 +148,10 @@ struct FPortalSceneState
 	UniqueList<secplane_t> UniquePlaneMirrors;
 
 	int skyboxrecursion = 0;
+
+	// Portal views left that may get ambient occlusion this frame (gl_ssao_portals)
+	int ssaoPortalsAvailable = 0;
+	void RankSSAOPortals(HWDrawInfo *di);
 
 	// Occlusion queries for the main view's portals: a portal whose stencil
 	// showed no pixels last frame only gets its stencil drawn (for the next

@@ -1047,7 +1047,6 @@ void HWDrawInfo::Set3DViewport(FRenderState &state)
 void HWDrawInfo::DrawScene(int drawmode)
 {
 	static int recursion = 0;
-	static int ssao_portals_available = 0;
 	auto& vp = Viewpoint;
 
 	// Light distance culling measures from this view's own position. Inside a
@@ -1064,7 +1063,7 @@ void HWDrawInfo::DrawScene(int drawmode)
 	if (drawmode == DM_MAINVIEW)
 	{
 		portalState.BeginMainView(*screen->RenderState());
-		ssao_portals_available = gl_ssao_portals;
+		portalState.ssaoPortalsAvailable = gl_ssao_portals;
 		applySSAO = true;
 		if (r_dithertransparency && vp.bDoOob)
 		{
@@ -1074,12 +1073,21 @@ void HWDrawInfo::DrawScene(int drawmode)
 	else if (drawmode == DM_OFFSCREEN)
 	{
 		portalState.occlusionMainView = false;
-		ssao_portals_available = 0;
+		portalState.ssaoPortalsAvailable = 0;
 	}
-	else if (drawmode == DM_PORTAL && ssao_portals_available > 0)
+	else if (drawmode == DM_PORTAL && (mCurrentPortal->AllowSSAO() || Level->flags3&LEVEL3_SKYBOXAO))
 	{
-		applySSAO = (mCurrentPortal->AllowSSAO() || Level->flags3&LEVEL3_SKYBOXAO);
-		ssao_portals_available--;
+		// The main view's portals reserved their slots by size (RankSSAOPortals),
+		// nested portals take what is left.
+		if (mCurrentPortal->ssaoGranted)
+		{
+			applySSAO = true;
+		}
+		else if (portalState.ssaoPortalsAvailable > 0)
+		{
+			applySSAO = true;
+			portalState.ssaoPortalsAvailable--;
+		}
 	}
 
 	if (vp.camera != nullptr)

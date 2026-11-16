@@ -79,6 +79,86 @@ CVAR(Int, gl_mirror_reflectdist, 1000, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 //
 //-----------------------------------------------------------------------------
 
+//-----------------------------------------------------------------------------
+//
+// Estimate how much of the screen a portal covers: each piece's area, times how
+// directly it faces the camera, over its squared distance (bigger and closer wins).
+//
+//-----------------------------------------------------------------------------
+
+double HWPortal::ScreenWeight(const DVector3 &vp)
+{
+	double weight = 0;
+	if (GetHWPortalType() == HWP_SECTORSTACK)
+	{
+		// The walls of a floor/ceiling portal are stencil helpers reaching far past
+		// the plane, so measure the flats instead.
+		auto ss = static_cast<HWSectorStackPortal*>(this);
+		const bool ceiling = planesused & (1 << sector_t::ceiling);
+		for (auto sub : ss->subsectors)
+		{
+			const int n = sub->numlines;
+			if (n < 3) continue;
+			double area = 0, cx = 0, cy = 0;
+			for (int i = 0; i < n; i++)
+			{
+				auto a = sub->firstline[i].v1;
+				auto b = sub->firstline[(i + 1) % n].v1;
+				area += a->fX() * b->fY() - b->fX() * a->fY();
+				cx += a->fX();
+				cy += a->fY();
+			}
+			cx /= n;
+			cy /= n;
+			const double z = ceiling ? sub->sector->ceilingplane.ZatPoint(cx, cy) : sub->sector->floorplane.ZatPoint(cx, cy);
+			const DVector3 v(cx - vp.X, cy - vp.Y, z - vp.Z);
+			const double d2 = max(v.LengthSquared(), 64. * 64.);
+			weight += fabs(area) * 0.5 * fabs(v.Z) / sqrt(d2) / d2;
+		}
+		return weight;
+	}
+	for (auto &l : lines)
+	{
+		const double dx = l.glseg.x2 - l.glseg.x1, dy = l.glseg.y2 - l.glseg.y1;
+		const double len = sqrt(dx * dx + dy * dy);
+		const double top = (l.ztop[0] + l.ztop[1]) * 0.5, bottom = (l.zbottom[0] + l.zbottom[1]) * 0.5;
+		const double h = min(top - bottom, 1024.);	// sky walls can reach very far
+		if (len <= 0 || h <= 0) continue;
+		const DVector3 v((l.glseg.x1 + l.glseg.x2) * 0.5 - vp.X, (l.glseg.y1 + l.glseg.y2) * 0.5 - vp.Y, clamp(vp.Z, bottom, top) - vp.Z);
+		const double d2 = max(v.LengthSquared(), 64. * 64.);
+		const double facing = fabs(v.X * dy - v.Y * dx) / len / sqrt(d2);
+		weight += len * h * facing / d2;
+	}
+	return weight;
+}
+
+//-----------------------------------------------------------------------------
+//
+// The main view's ambient-occluded portals take the gl_ssao_portals slots by
+// size x closeness, before any nested portal can use one up.
+//
+//-----------------------------------------------------------------------------
+
+void FPortalSceneState::RankSSAOPortals(HWDrawInfo *di)
+{
+	TArray<std::pair<double, HWPortal*>> candidates;
+	for (auto p : di->Portals)
+	{
+		if (p == nullptr || p->lines.Size() == 0) continue;
+		const int type = p->GetHWPortalType();
+		if (type == HWP_SKY || type == HWP_HORIZON) continue;
+		if (!p->AllowSSAO() && !(di->Level->flags3 & LEVEL3_SKYBOXAO)) continue;
+		candidates.Push({ p->ScreenWeight(di->Viewpoint.Pos), p });
+	}
+	std::sort(candidates.begin(), candidates.end(), [](const auto &a, const auto &b) { return a.first > b.first; });
+	for (unsigned i = 0; i < candidates.Size() && ssaoPortalsAvailable > 0; i++)
+	{
+		candidates[i].second->ssaoGranted = true;
+		ssaoPortalsAvailable--;
+		if (gl_portalinfo) Printf("%sAO slot: %s, weight %g\n", indent.GetChars(), candidates[i].second->GetName(), candidates[i].first);
+	}
+}
+
 void FPortalSceneState::EndFrame(HWDrawInfo *di, FRenderState &state)
 {
 	HWPortal * p;
@@ -87,6 +167,11 @@ void FPortalSceneState::EndFrame(HWDrawInfo *di, FRenderState &state)
 	{
 		Printf("%s%d portals, depth = %d\n%s{\n", indent.GetChars(), di->Portals.Size(), renderdepth, indent.GetChars());
 		indent += "  ";
+	}
+
+	if (di->mCurrentPortal == nullptr && ssaoPortalsAvailable > 0 && state.GetPassType() == GBUFFER_PASS)
+	{
+		RankSSAOPortals(di);
 	}
 
 	if (MirrorFlag > 0 && gl_mirror_maxportals > 0)
