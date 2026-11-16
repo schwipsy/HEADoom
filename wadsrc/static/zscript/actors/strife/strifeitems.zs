@@ -823,6 +823,11 @@ class UpgradeAccuracy : DummyStrifeItem
 
 // Start a slideshow --------------------------------------------------------
 
+// Marks that this level's slideshow has started (saved with the level).
+class SlideshowStarted : Thinker
+{
+}
+
 class SlideshowStarter : DummyStrifeItem
 {
 	override bool TryPickup (in out Actor toucher)
@@ -835,6 +840,15 @@ class SlideshowStarter : DummyStrifeItem
 			GoAwayAndDie ();
 			return true;
 		}
+		// Any player can start it, but only once per level: in a netgame every
+		// player runs the enter script, and starting it once per player locked
+		// up every screen. The slideshow still shows for everyone.
+		if (ThinkerIterator.Create("SlideshowStarted").Next() != null)
+		{
+			GoAwayAndDie ();
+			return true;
+		}
+		new("SlideshowStarted");
 		Level.StartSlideshow();
 		if (level.levelnum == 10)
 		{

@@ -3168,12 +3168,21 @@ bool G_CheckDemoStatus (void)
 	return false;
 }
 
+static bool InLevelCutscene;
+
+bool G_InLevelCutscene()
+{
+	return InLevelCutscene;
+}
+
 void G_StartSlideshow(FLevelLocals *Level, FName whichone, int state)
 {
 	auto SelectedSlideshow = whichone == NAME_None ? Level->info->slideshow : whichone;
 	auto slide = F_StartIntermission(SelectedSlideshow, state);
+	InLevelCutscene = true;
 	RunIntermission(nullptr, nullptr, slide, nullptr, false, [](bool)
 	{
+		InLevelCutscene = false;
 		primaryLevel->SetMusic();
 		gamestate = GS_LEVEL;
 		wipegamestate = GS_LEVEL;

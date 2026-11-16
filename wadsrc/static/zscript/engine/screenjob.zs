@@ -543,6 +543,9 @@ class ScreenJobRunner : Object UI
 		SetLastInputType(ev);
 
 		if (ConsumedInput(ev)) return true;
+		// When only the host may skip, other players' keys must not move
+		// their own screens ahead either.
+		if (netgame && net_cutscenereadytype == 2 && consoleplayer != Net_Arbitrator) return false;
 		if (paused || index < 0 || index >= jobs.Size()) return false;
 		if (jobs[index].jobstate != ScreenJob.running) return false;
 		return jobs[index].OnEvent(ev);

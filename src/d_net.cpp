@@ -176,7 +176,7 @@ CUSTOM_CVAR(Int, net_disablepause, 0, CVAR_SERVERINFO | CVAR_NOSAVE)
 	else if (self > 2)
 		self = 2;
 }
-CUSTOM_CVAR(Int, net_cutscenereadytype, RT_VOTE, CVAR_SERVERINFO | CVAR_NOSAVE)
+CUSTOM_CVAR(Int, net_cutscenereadytype, RT_HOST_ONLY, CVAR_SERVERINFO | CVAR_NOSAVE)
 {
 	if (self < RT_VOTE)
 		self = RT_VOTE;
@@ -764,6 +764,15 @@ static bool IsMapLoaded()
 	return gamestate == GS_LEVEL;
 }
 
+// For the level start handshake a cutscene started from inside the level
+// (e.g. a slideshow from an ENTER script) still counts as loaded. Otherwise it
+// can switch the game to GS_FINALE/GS_CUTSCENE before the handshake finishes, and every
+// player waits for the others forever.
+static bool IsLevelReadyForStart()
+{
+	return IsMapLoaded() || ((gamestate == GS_CUTSCENE || gamestate == GS_FINALE) && G_InLevelCutscene());
+}
+
 static void CheckLevelStart(int client, int delayTics)
 {
 	if (LevelStartStatus != LST_WAITING)
@@ -799,7 +808,7 @@ static void CheckLevelStart(int client, int delayTics)
 	}
 
 	LevelStartAck |= (uint64_t)1u << client;
-	if ((LevelStartAck & mask) == mask && IsMapLoaded())
+	if ((LevelStartAck & mask) == mask && IsLevelReadyForStart())
 	{
 		// Beyond this point a player is likely lagging out anyway.
 		constexpr uint16_t LatencyCap = 350u;
@@ -1345,7 +1354,7 @@ void NetUpdate(int tics)
 			}
 			else
 			{
-				if (consoleplayer != Net_Arbitrator && IsMapLoaded())
+				if (consoleplayer != Net_Arbitrator && IsLevelReadyForStart())
 				{
 					NetBuffer[0] = NCMD_LEVELREADY;
 					NetBuffer[1] = CurrentLobbyID;

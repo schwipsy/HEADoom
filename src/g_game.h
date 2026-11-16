@@ -85,6 +85,8 @@ enum
 
 void G_ScreenShot (const char* filename);
 void G_StartSlideshow(FLevelLocals *Level, FName whichone, int state);
+// True while a slideshow started from inside a level is showing.
+bool G_InLevelCutscene();
 
 class FSerializer;
 bool G_CheckSaveGameWads (FSerializer &arc, bool printwarn);
