@@ -27,6 +27,7 @@
 #include "d_event.h"
 #include "g_game.h"
 #include "actor.h"
+#include "actorinlines.h"
 #include "p_local.h"
 #include "p_checkposition.h"
 #include "sbar.h"
