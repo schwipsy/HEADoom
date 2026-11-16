@@ -692,6 +692,7 @@ public:
 
 	void Serialize(FSerializer &arc);
 	int RunScript();
+	AActor *CoopGiveTarget();
 	PClass *GetClassForIndex(int index) const;
 
 
@@ -6939,6 +6940,47 @@ PClass *DLevelScript::GetClassForIndex(int index) const
 	return PClass::FindActor(Level->Behaviors.LookupString(index));
 }
 
+//==========================================================================
+//
+// Co-op shared script items
+//
+// In a co-op game, an item that a script gives to the player who started it
+// goes to every player instead (as if the script had no activator), so
+// everyone gets what one player picked up or triggered. Scripts that already
+// run once for each player (enter, respawn, death, return, disconnect) keep
+// giving only to their own player, or everyone would get the item twice.
+//
+//==========================================================================
+
+CVAR(Bool, sv_coopsharescriptitems, true, CVAR_SERVERINFO | CVAR_ARCHIVE)
+
+AActor *DLevelScript::CoopGiveTarget()
+{
+	AActor *who = activator.Get();
+	if (who == nullptr || who->player == nullptr || !multiplayer || deathmatch || !sv_coopsharescriptitems || bClientSide)
+		return who;
+
+	FBehavior *module = nullptr;
+	const ScriptPtr *code = Level->Behaviors.FindScript(script, module);
+	if (code == nullptr)
+		return who;
+
+	switch (code->Type)
+	{
+	case SCRIPT_Enter:
+	case SCRIPT_Respawn:
+	case SCRIPT_Death:
+	case SCRIPT_Return:
+	case SCRIPT_BlueReturn:
+	case SCRIPT_RedReturn:
+	case SCRIPT_WhiteReturn:
+	case SCRIPT_Disconnect:
+		return who;
+	default:
+		return nullptr;	// nullptr = every player in the game
+	}
+}
+
 int DLevelScript::RunScript()
 {
 	ACSLocalVariables locals(Localvars);
@@ -9315,7 +9357,7 @@ scriptwait:
 		case PCD_GIVEINVENTORY:
 		{
 			int typeindex = FName(Level->Behaviors.LookupString(STACK(2))).GetIndex();
-			ScriptUtil::Exec(NAME_GiveInventory, ScriptUtil::Pointer, activator.Get(), ScriptUtil::Int, typeindex, ScriptUtil::Int, STACK(1), ScriptUtil::End);
+			ScriptUtil::Exec(NAME_GiveInventory, ScriptUtil::Pointer, CoopGiveTarget(), ScriptUtil::Int, typeindex, ScriptUtil::Int, STACK(1), ScriptUtil::End);
 			sp -= 2;
 			break;
 		}
@@ -9344,7 +9386,7 @@ scriptwait:
 		case PCD_GIVEINVENTORYDIRECT:
 		{
 			int typeindex = FName(Level->Behaviors.LookupString(TAGSTR(uallong(pc[0])))).GetIndex();
-			ScriptUtil::Exec(NAME_GiveInventory, ScriptUtil::Pointer, activator.Get(), ScriptUtil::Int, typeindex, ScriptUtil::Int, uallong(pc[1]), ScriptUtil::End);
+			ScriptUtil::Exec(NAME_GiveInventory, ScriptUtil::Pointer, CoopGiveTarget(), ScriptUtil::Int, typeindex, ScriptUtil::Int, uallong(pc[1]), ScriptUtil::End);
 			pc += 2;
 			break;
 		}
