@@ -161,6 +161,17 @@ struct HWDrawInfo
 	std::atomic<int> spriteindex;
 	HWPortal *mClipPortal;
 	HWPortal *mCurrentPortal;
+	// Mirror reflections only draw the world within this radius of the reflected
+	// view (squared; 0 = no limit).
+	double mViewLimit2 = 0;
+	DVector2 mViewLimitCenter;
+	bool BeyondViewLimit(double left, double bottom, double right, double top) const
+	{
+		if (mViewLimit2 <= 0) return false;
+		const double dx = mViewLimitCenter.X < left ? left - mViewLimitCenter.X : mViewLimitCenter.X > right ? mViewLimitCenter.X - right : 0;
+		const double dy = mViewLimitCenter.Y < bottom ? bottom - mViewLimitCenter.Y : mViewLimitCenter.Y > top ? mViewLimitCenter.Y - top : 0;
+		return dx * dx + dy * dy > mViewLimit2;
+	}
 	//FRotator mAngles;
 	Clipper *mClipper;
 	Clipper *vClipper; // Vertical clipper

@@ -919,6 +919,7 @@ void HWDrawInfo::DoSubsector(subsector_t * sub)
 
 	sector=sub->sector;
 	if (!sector) return;
+	if (BeyondViewLimit(sub->bbox.Left(), sub->bbox.Bottom(), sub->bbox.Right(), sub->bbox.Top())) return;
 
 	// If the mapsections differ this subsector can't possibly be visible from the current view point
 	if (!CurrentMapSections[sub->mapsection]) return;
@@ -1195,6 +1196,10 @@ void HWDrawInfo::RenderBSPNode (void *node)
 
 		// Possibly divide back space (away from the viewer).
 		side ^= 1;
+
+		// Past a mirror's reflection limit.
+		if (BeyondViewLimit(bsp->bbox[side][BOXLEFT], bsp->bbox[side][BOXBOTTOM], bsp->bbox[side][BOXRIGHT], bsp->bbox[side][BOXTOP]))
+			return;
 
 		// It is not necessary to use the slower precise version here
 		if (!mClipper->CheckBox(bsp->bbox[side]))

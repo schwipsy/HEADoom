@@ -70,6 +70,8 @@ FPortalSceneState portalState;
 // Inside a mirror's reflection only this many portals get rendered (the ones
 // with the most lines). Skies and horizons don't count. 0 = no limit.
 CVAR(Int, gl_mirror_maxportals, 2, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+// How far past the mirror the reflected world is drawn (0 = no limit).
+CVAR(Int, gl_mirror_reflectdist, 1000, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 
 //-----------------------------------------------------------------------------
 //
@@ -713,6 +715,18 @@ bool HWMirrorPortal::Setup(HWDrawInfo *di, FRenderState &rstate, Clipper *clippe
 		vp.Pos.Y += v[0] * state->renderdepth / 2;
 	}
 	vp.Angles.Yaw = linedef->Delta().Angle() * 2. - StartAngle;
+
+	if (gl_mirror_reflectdist > 0)
+	{
+		// Reach = camera-to-mirror distance plus the limit, so everything within
+		// the limit of the mirror is kept.
+		const DVector2 a = v1->fPos(), ab = v2->fPos() - a, p = StartPos.XY();
+		const double len2 = ab.LengthSquared();
+		const double t = len2 > 0 ? clamp(((p - a) | ab) / len2, 0., 1.) : 0.;
+		const double reach = (a + ab * t - p).Length() + gl_mirror_reflectdist;
+		di->mViewLimitCenter = vp.Pos.XY();
+		di->mViewLimit2 = reach * reach;
+	}
 
 	vp.ViewActor = nullptr;
 

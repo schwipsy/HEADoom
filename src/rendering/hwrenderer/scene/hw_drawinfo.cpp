@@ -137,6 +137,7 @@ void HWDrawInfo::StartScene(FRenderViewpoint &parentvp, HWViewpointUniforms *uni
 	rClipper->amRadar = true;
 
 	Viewpoint = parentvp;
+	mViewLimit2 = 0;
 	lightmode = getRealLightmode(Level, true);
 
 	if (uniforms)
@@ -610,6 +611,39 @@ void HWDrawInfo::RenderTranslucent(FRenderState &state)
 //
 //-----------------------------------------------------------------------------
 
+EXTERN_CVAR(Int, gl_mirror_reflectdist)
+
+// Color for portal areas that have nothing drawn in them: the sector's fog color,
+// else the map's fog color, else the sector's light color at its brightness.
+static PalEntry PortalFillColor(FLevelLocals *Level, sector_t *sec)
+{
+	PalEntry fill = sec ? sec->Colormap.FadeColor : PalEntry(0);
+	if ((fill.d & 0xffffff) == 0) fill = Level->fadeto;
+	if ((fill.d & 0xffffff) == 0 && sec)
+	{
+		const PalEntry lc = sec->Colormap.LightColor;
+		const int l = clamp<int>(sec->lightlevel, 0, 255);
+		fill = PalEntry(255, lc.r * l / 255, lc.g * l / 255, lc.b * l / 255);
+	}
+	fill.a = 255;
+	return fill;
+}
+
+static void FillPortal(HWPortal *gp, FRenderState &state, PalEntry fill)
+{
+	state.SetEffect(EFF_STENCIL);
+	state.EnableTexture(false);
+	state.SetObjectColor(fill);
+	state.SetDepthMask(false);
+	state.SetDepthFunc(DF_Always);
+	gp->DrawPortalStencil(state, 0);	// STP_Stencil: just the portal's surface
+	state.SetObjectColor(0xffffffff);
+	state.SetEffect(EFF_NONE);
+	state.EnableTexture(true);
+	state.SetDepthFunc(DF_Less);
+	state.SetDepthMask(gp->NeedDepthBuffer());
+}
+
 void HWDrawInfo::RenderPortal(HWPortal *p, FRenderState &state, bool usestencil, bool skipContents)
 {
 	auto gp = static_cast<HWPortal *>(p);
@@ -617,6 +651,12 @@ void HWDrawInfo::RenderPortal(HWPortal *p, FRenderState &state, bool usestencil,
 	gp->occlusionQuery = 0;
 	if (!skipContents)
 	{
+		// A distance-limited mirror leaves holes past the limit: fill with fog first.
+		if (usestencil && gl_mirror_reflectdist > 0 && gp->GetHWPortalType() == HWP_MIRROR)
+		{
+			auto line = static_cast<line_t *>(gp->GetSource());
+			FillPortal(gp, state, PortalFillColor(Level, line->frontsector ? line->frontsector : Viewpoint.sector));
+		}
 		auto new_di = StartDrawInfo(this->Level, this, Viewpoint, &VPUniforms);
 		new_di->mCurrentPortal = gp;
 		state.SetLightIndex(-1);
@@ -629,20 +669,7 @@ void HWDrawInfo::RenderPortal(HWPortal *p, FRenderState &state, bool usestencil,
 	{
 		// Fill the hidden portal with the fog color around the camera, so a portal
 		// that comes back into view shows fog for one frame instead of garbage.
-		PalEntry fill = Viewpoint.sector ? Viewpoint.sector->Colormap.FadeColor : PalEntry(0);
-		if ((fill.d & 0xffffff) == 0) fill = Level->fadeto;
-		fill.a = 255;
-		state.SetEffect(EFF_STENCIL);
-		state.EnableTexture(false);
-		state.SetObjectColor(fill);
-		state.SetDepthMask(false);
-		state.SetDepthFunc(DF_Always);
-		gp->DrawPortalStencil(state, 0);	// STP_Stencil: just the portal's surface
-		state.SetObjectColor(0xffffffff);
-		state.SetEffect(EFF_NONE);
-		state.EnableTexture(true);
-		state.SetDepthFunc(DF_Less);
-		state.SetDepthMask(gp->NeedDepthBuffer());
+		FillPortal(gp, state, PortalFillColor(Level, Viewpoint.sector));
 	}
 	gp->RemoveStencil(this, state, usestencil);
 
