@@ -31,6 +31,9 @@
 
 struct PostProcessShader;
 
+// Ambient occlusion distance fade (gl_ssao_maxdist / gl_ssao_fadedist) as shader uniforms
+void GetSSAOFade(float &fadeEnd, float &fadeScale);
+
 typedef FRenderStyle PPBlendMode;
 typedef IntRect PPViewport;
 
@@ -637,7 +640,7 @@ struct SSAOUniforms
 	float AOMultiplier;
 	float AOStrength;
 	int SampleIndex;
-	float Padding0, Padding1;
+	float AOFadeEnd, AOFadeScale;
 	FVector2 Scale;
 	FVector2 Offset;
 
@@ -654,8 +657,8 @@ struct SSAOUniforms
 			{ "AOMultiplier", UniformType::Float, offsetof(SSAOUniforms, AOMultiplier) },
 			{ "AOStrength", UniformType::Float, offsetof(SSAOUniforms, AOStrength) },
 			{ "SampleIndex", UniformType::Int, offsetof(SSAOUniforms, SampleIndex) },
-			{ "Padding0", UniformType::Float, offsetof(SSAOUniforms, Padding0) },
-			{ "Padding1", UniformType::Float, offsetof(SSAOUniforms, Padding1) },
+			{ "AOFadeEnd", UniformType::Float, offsetof(SSAOUniforms, AOFadeEnd) },
+			{ "AOFadeScale", UniformType::Float, offsetof(SSAOUniforms, AOFadeScale) },
 			{ "Scale", UniformType::Vec2, offsetof(SSAOUniforms, Scale) },
 			{ "Offset", UniformType::Vec2, offsetof(SSAOUniforms, Offset) },
 		};

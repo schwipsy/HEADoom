@@ -133,7 +133,11 @@ void main()
 {
 	vec3 viewPosition = FetchViewPos(TexCoord);
 	vec3 viewNormal = FetchNormal(TexCoord);
-	float occlusion = viewNormal != vec3(0.0) ? ComputeAO(viewPosition, viewNormal) * AOStrength + (1.0 - AOStrength) : 1.0;
+	// Fade out towards AOFadeEnd and skip the sampling entirely past it
+	float fade = AOFadeScale > 0.0 ? clamp((AOFadeEnd - viewPosition.z) * AOFadeScale, 0.0, 1.0) : 1.0;
+	float occlusion = 1.0;
+	if (fade > 0.0 && viewNormal != vec3(0.0))
+		occlusion = mix(1.0, ComputeAO(viewPosition, viewNormal) * AOStrength + (1.0 - AOStrength), fade);
 
 	FragColor = vec4(occlusion, viewPosition.z, 0.0, 1.0);
 }

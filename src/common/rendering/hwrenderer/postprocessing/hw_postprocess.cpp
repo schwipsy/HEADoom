@@ -727,6 +727,20 @@ void PPAmbientOcclusion::UpdateTextures(int width, int height)
 	LastHeight = height;
 }
 
+void GetSSAOFade(float &fadeEnd, float &fadeScale)
+{
+	if (gl_ssao_maxdist > 0)
+	{
+		fadeEnd = gl_ssao_maxdist;
+		fadeScale = 1.0f / max((float)gl_ssao_fadedist, 1.0f);
+	}
+	else
+	{
+		fadeEnd = 1.e30f;
+		fadeScale = 0.0f;
+	}
+}
+
 void PPAmbientOcclusion::Render(PPRenderState *renderstate, float m5, int sceneWidth, int sceneHeight)
 {
 	if (gl_ssao == 0 || sceneWidth == 0 || sceneHeight == 0 || level_noAmbientOcclusion)
@@ -775,6 +789,7 @@ void PPAmbientOcclusion::Render(PPRenderState *renderstate, float m5, int sceneW
 	ssaoUniforms.RadiusToScreen = aoRadius * 0.5f / tanHalfFovy * AmbientHeight;
 	ssaoUniforms.AOMultiplier = 1.0f / (1.0f - nDotVBias);
 	ssaoUniforms.AOStrength = aoStrength;
+	GetSSAOFade(ssaoUniforms.AOFadeEnd, ssaoUniforms.AOFadeScale);
 	ssaoUniforms.Scale = sceneScale;
 	ssaoUniforms.Offset = sceneOffset;
 

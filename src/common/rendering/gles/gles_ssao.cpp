@@ -86,6 +86,8 @@ uniform float NegInvR2;
 uniform float RadiusToScreen;
 uniform float AOMultiplier;
 uniform float AOStrength;
+uniform float AOFadeEnd;
+uniform float AOFadeScale;
 uniform float FogDensity;
 uniform int FogRadial;
 
@@ -165,8 +167,9 @@ void main()
 	{
 		vec3 viewPosition = FetchViewPos(TexCoord);
 		vec3 viewNormal = ReconstructNormal(TexCoord, viewPosition);
-		if (viewNormal != vec3(0.0))
-			occlusion = ComputeAO(viewPosition, viewNormal) * AOStrength + (1.0 - AOStrength);
+		float fade = AOFadeScale > 0.0 ? clamp((AOFadeEnd - viewPosition.z) * AOFadeScale, 0.0, 1.0) : 1.0;
+		if (fade > 0.0 && viewNormal != vec3(0.0))
+			occlusion = mix(1.0, ComputeAO(viewPosition, viewNormal) * AOStrength + (1.0 - AOStrength), fade);
 		float fogdist = max(16.0, FogRadial != 0 ? length(viewPosition) : viewPosition.z);
 		fogfactor = exp2(FogDensity * fogdist);
 	}
@@ -532,6 +535,10 @@ void FGLESAmbientOcclusion::Render(FGLRenderer *renderer, FGLRenderBuffers *buff
 		glUniform1f(glGetUniformLocation(prog, "RadiusToScreen"), aoRadius * 0.5f / tanHalfFovy * aoHeight);
 		glUniform1f(glGetUniformLocation(prog, "AOMultiplier"), 1.0f / (1.0f - nDotVBias));
 		glUniform1f(glGetUniformLocation(prog, "AOStrength"), gl_ssao_strength);
+		float fadeEnd, fadeScale;
+		GetSSAOFade(fadeEnd, fadeScale);
+		glUniform1f(glGetUniformLocation(prog, "AOFadeEnd"), fadeEnd);
+		glUniform1f(glGetUniformLocation(prog, "AOFadeScale"), fadeScale);
 		glUniform1f(glGetUniformLocation(prog, "FogDensity"), ssaoViewFog.Density);
 		glUniform1i(glGetUniformLocation(prog, "FogRadial"), ssaoViewFog.Radial ? 1 : 0);
 		glActiveTexture(GL_TEXTURE2);

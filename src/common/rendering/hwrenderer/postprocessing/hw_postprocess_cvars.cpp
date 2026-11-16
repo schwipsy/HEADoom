@@ -75,6 +75,9 @@ CVAR(Float, gl_ssao_strength, 0.7f, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 CVAR(Int, gl_ssao_debug, 0, 0)
 CVAR(Float, gl_ssao_bias, 0.2f, 0)
 CVAR(Float, gl_ssao_radius, 80.0f, 0)
+// Ambient occlusion fades out over gl_ssao_fadedist units before gl_ssao_maxdist and is skipped past it. 0 = no limit.
+CVAR(Float, gl_ssao_maxdist, 1000.0f, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+CVAR(Float, gl_ssao_fadedist, 250.0f, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 CUSTOM_CVAR(Float, gl_ssao_blur, 16.0f, 0)
 {
 	if (self < 0.1f) self = 0.1f;
