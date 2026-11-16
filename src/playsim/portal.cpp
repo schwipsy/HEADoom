@@ -29,6 +29,7 @@
 #include "p_spec.h"
 #include "g_levellocals.h"
 #include "vm.h"
+#include <vector>
 
 DEFINE_FIELD(FSectorPortal, mType);
 DEFINE_FIELD(FSectorPortal, mFlags);
@@ -837,6 +838,108 @@ bool FLevelLocals::ConnectPortalGroups()
 
 //============================================================================
 //
+// SplitMismatchedPortalGroups
+//
+// A pair of portal groups can only have one displacement, so when several
+// linked sector portals connect the same two groups with different offsets,
+// all but the first get disabled (they still render, but nothing passes
+// through). Splitting one of the groups so that each portal ends up between
+// its own pair of groups fixes this. That is what a dividing line portal does
+// by hand. Sectors go to the part whose portal sectors are closest, and the
+// parts get a zero offset between each other since they share the same space.
+//
+//============================================================================
+
+static DVector2 SectorCenter(const sector_t *sec)
+{
+	DVector2 c(0, 0);
+	for (auto line : sec->Lines) c += line->v1->fPos() + line->Delta() / 2;
+	return sec->Lines.Size() ? c / sec->Lines.Size() : c;
+}
+
+static int SplitMismatchedPortalGroups(FLevelLocals *Level, TArray<FSectorPortal *> &orgs, int id, std::vector<int> &family)
+{
+	auto root = [&](int g) { while (g < (int)family.size() && family[g] != g) g = family[g]; return g; };
+	for (int g = (int)family.size(); g < id; g++) family.push_back(g);
+
+	for (int pass = 0; pass < 32; pass++)
+	{
+		bool didsplit = false;
+		for (unsigned i = 0; i < orgs.Size() && !didsplit; i++)
+		{
+			const int ga = orgs[i]->mOrigin->PortalGroup, gb = orgs[i]->mDestination->PortalGroup;
+			if (ga <= 0 || gb <= 0 || ga == gb) continue;
+
+			// Every portal between ga and gb, with its offset seen from ga.
+			std::vector<DVector2> disps;
+			std::vector<std::vector<FSectorPortal *>> classes;
+			for (auto p : orgs)
+			{
+				const int po = p->mOrigin->PortalGroup, pd = p->mDestination->PortalGroup;
+				DVector2 d;
+				if (po == ga && pd == gb) d = p->mDisplacement;
+				else if (po == gb && pd == ga) d = -p->mDisplacement;
+				else continue;
+				unsigned k = 0;
+				while (k < disps.size() && (disps[k] - d).LengthSquared() >= 1e-6) k++;
+				if (k == disps.size()) { disps.push_back(d); classes.emplace_back(); }
+				classes[k].push_back(p);
+			}
+			if (disps.size() < 2) continue;
+
+			// Seeds in gb: each portal's own sector there plus every gb sector carrying it.
+			std::vector<std::pair<DVector2, unsigned>> seeds;
+			for (unsigned k = 0; k < classes.size(); k++)
+			{
+				for (auto p : classes[k])
+				{
+					sector_t *inb = p->mOrigin->PortalGroup == gb ? p->mOrigin : p->mDestination;
+					seeds.push_back({ SectorCenter(inb), k });
+				}
+			}
+			for (auto &sec : Level->sectors)
+			{
+				if (sec.PortalGroup != gb) continue;
+				for (int j = 0; j < 2; j++)
+				{
+					if (sec.GetPortalType(j) != PORTS_LINKEDPORTAL) continue;
+					auto p = sec.GetPortal(j);
+					for (unsigned k = 0; k < classes.size(); k++)
+						for (auto cp : classes[k])
+							if (cp == p) seeds.push_back({ SectorCenter(&sec), k });
+				}
+			}
+
+			std::vector<int> newid(classes.size());
+			newid[0] = gb;
+			for (unsigned k = 1; k < classes.size(); k++)
+			{
+				newid[k] = id++;
+				family.push_back(root(gb));
+			}
+			for (auto &sec : Level->sectors)
+			{
+				if (sec.PortalGroup != gb) continue;
+				const DVector2 c = SectorCenter(&sec);
+				double best = DBL_MAX;
+				unsigned bestk = 0;
+				for (auto &s : seeds)
+				{
+					const double dist = (s.first - c).LengthSquared();
+					if (dist < best) { best = dist; bestk = s.second; }
+				}
+				sec.PortalGroup = newid[bestk];
+			}
+			DPrintf(DMSG_NOTIFY, "Split portal group %d into %d parts for portals with different offsets\n", gb, (int)classes.size());
+			didsplit = true;
+		}
+		if (!didsplit) break;
+	}
+	return id;
+}
+
+//============================================================================
+//
 // P_CreateLinkedPortals
 //
 // Creates the data structures needed for linked portals
@@ -906,6 +1009,9 @@ void FLevelLocals::CreateLinkedPortals()
 		}
 	}
 
+	std::vector<int> family;
+	id = SplitMismatchedPortalGroups(this, orgs, id, family);
+
 	Displacements.Create(id);
 	// Check for leftover sectors that connect to a portal
 	for (auto &sec : sectors)
@@ -928,6 +1034,19 @@ void FLevelLocals::CreateLinkedPortals()
 		if (linePortals[i].mType == PORTT_LINKED)
 		{
 			AddDisplacementForPortal(&linePortals[i]);
+		}
+	}
+	// Parts of a split group share the same space.
+	auto familyroot = [&](int g) { while (family[g] != g) g = family[g]; return g; };
+	for (int x = 1; x < (int)family.size(); x++)
+	{
+		for (int y = 1; y < (int)family.size(); y++)
+		{
+			if (x != y && familyroot(x) == familyroot(y))
+			{
+				Displacements(x, y).pos = { 0, 0 };
+				Displacements(x, y).isSet = true;
+			}
 		}
 	}
 
