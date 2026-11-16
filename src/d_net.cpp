@@ -1129,6 +1129,18 @@ static void CheckConsistencies()
 				if (clientState.LocalConsistency[tic] != clientState.NetConsistency[tic])
 				{
 					players[client].inconsistant = true;
+					// Also write it to the log (the status bar text is not logged), with enough state to
+					// compare the logs of both machines: what differed and when.
+					Printf(TEXTCOLOR_RED "Out of sync with player %d at check %d (gametic %d, level time %d): local %d, remote %d\n",
+						client, clientState.LastVerifiedConsistency, gametic, primaryLevel ? primaryLevel->maptime : -1,
+						clientState.LocalConsistency[tic], clientState.NetConsistency[tic]);
+					for (auto c : NetworkClients)
+					{
+						if (players[c].mo != nullptr)
+							Printf("  player %d: pos %.3f %.3f %.3f yaw %.3f pitch %.3f health %d\n", c,
+								players[c].mo->X(), players[c].mo->Y(), players[c].mo->Z(),
+								players[c].mo->Angles.Yaw.Degrees(), players[c].mo->Angles.Pitch.Degrees(), players[c].health);
+					}
 					clientState.LastVerifiedConsistency = clientState.CurrentNetConsistency;
 					break;
 				}
