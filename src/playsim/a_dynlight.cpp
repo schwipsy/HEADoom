@@ -584,8 +584,14 @@ void FDynamicLight::CollectWithinRadius(const DVector3 &opos, FSection *section,
 			line_t *other = section->segments[0].sidedef->linedef;
 			if (sec->GetPortalPlaneZ(sector_t::ceiling) < Z() + radius)
 			{
-				DVector2 refpos = other->v1->fPos() + other->Delta() / 2 + sec->GetPortalDisplacement(sector_t::ceiling);
-				subsector_t *othersub = Level->PointInRenderSubsector(refpos);
+				// Seed the far side right across from the light, so the spread starts where the light is.
+				// Fall back to the line midpoint when that point is not under/over the portal.
+				subsector_t *othersub = Level->PointInRenderSubsector(pos.XY() + sec->GetPortalDisplacement(sector_t::ceiling));
+				if (othersub->sector->PortalBlocksSight(sector_t::floor))
+				{
+					DVector2 refpos = other->v1->fPos() + other->Delta() / 2 + sec->GetPortalDisplacement(sector_t::ceiling);
+					othersub = Level->PointInRenderSubsector(refpos);
+				}
 				FSection *othersect = othersub->section;
 				if (othersect->validcount != dl_validcount)
 				{
@@ -599,8 +605,14 @@ void FDynamicLight::CollectWithinRadius(const DVector3 &opos, FSection *section,
 			line_t *other = section->segments[0].sidedef->linedef;
 			if (sec->GetPortalPlaneZ(sector_t::floor) > Z() - radius)
 			{
-				DVector2 refpos = other->v1->fPos() + other->Delta() / 2 + sec->GetPortalDisplacement(sector_t::floor);
-				subsector_t *othersub = Level->PointInRenderSubsector(refpos);
+				// Seed the far side right across from the light, so the spread starts where the light is.
+				// Fall back to the line midpoint when that point is not under/over the portal.
+				subsector_t *othersub = Level->PointInRenderSubsector(pos.XY() + sec->GetPortalDisplacement(sector_t::floor));
+				if (othersub->sector->PortalBlocksSight(sector_t::ceiling))
+				{
+					DVector2 refpos = other->v1->fPos() + other->Delta() / 2 + sec->GetPortalDisplacement(sector_t::floor);
+					othersub = Level->PointInRenderSubsector(refpos);
+				}
 				FSection *othersect = othersub->section;
 				if (othersect->validcount != dl_validcount)
 				{
@@ -950,3 +962,4 @@ void FLevelLocals::RecreateAllAttachedLights()
 		}
 	}
 }
+

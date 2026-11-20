@@ -47,14 +47,15 @@ DVector3 hw_LightCullViewPos;
 
 static constexpr float LIGHT_CULL_FADE = 0.15f; // fraction of the cull distance used for fading out
 
-float hw_LightDistanceFade(FDynamicLight* light, const DVector3& viewpos)
+// group: measure from the light as seen in that portal group, so lights across linked portals are not culled by their far-away map position.
+float hw_LightDistanceFade(FDynamicLight* light, const DVector3& viewpos, int group)
 {
 	const float maxdist = r_light_distance_cull;
 	if (maxdist <= 0.f)
 		return 1.f;
 
 	// Distance from the camera to the nearest edge of the light's sphere.
-	const float edge = float((light->Pos - viewpos).Length()) - light->GetRadius();
+	const float edge = float(((group >= 0 ? light->PosRelative(group) : light->Pos) - viewpos).Length()) - light->GetRadius();
 	if (edge >= maxdist)
 		return 0.f;
 
@@ -64,10 +65,10 @@ float hw_LightDistanceFade(FDynamicLight* light, const DVector3& viewpos)
 	return (maxdist - edge) / (maxdist - fadestart);
 }
 
-bool hw_LightShadowCulled(FDynamicLight* light, const DVector3& viewpos)
+bool hw_LightShadowCulled(FDynamicLight* light, const DVector3& viewpos, int group)
 {
 	const double maxdist = r_light_shadow_distance_cull;
-	return maxdist > 0. && (light->Pos - viewpos).LengthSquared() > maxdist * maxdist;
+	return maxdist > 0. && ((group >= 0 ? light->PosRelative(group) : light->Pos) - viewpos).LengthSquared() > maxdist * maxdist;
 }
 
 
@@ -103,7 +104,7 @@ void AddLightToList(FDynLightData &dld, int group, FDynamicLight * light, bool f
 {
 	int i = 0;
 
-	const float fade = hw_LightDistanceFade(light, hw_LightCullViewPos);
+	const float fade = hw_LightDistanceFade(light, hw_LightCullViewPos, group);
 	if (fade <= 0.f)
 		return;
 

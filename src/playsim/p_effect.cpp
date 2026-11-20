@@ -61,6 +61,10 @@ FARG(numparticles, "Performance", "Max number of particles", "",
 
 FCRandom pr_railtrail("RailTrail");
 
+// Particles spawned farther than this from every player's view are not created (0 = off).
+// Purely visual: particles use no game RNG, so skipping them cannot desync.
+CVAR(Float, r_particlelod, 2048.f, CVAR_ARCHIVE)
+
 #define FADEFROMTTL(a)	(1.f/(a))
 
 static int grey1, grey2, grey3, grey4, red, green, blue, yellow, black,
@@ -353,6 +357,20 @@ void P_ThinkParticles (FLevelLocals *Level)
 void P_SpawnParticle(FLevelLocals *Level, const DVector3 &pos, const DVector3 &vel, const DVector3 &accel, PalEntry color, double startalpha, int lifetime, double size,
 	double fadestep, double sizestep, int flags, FTextureID texture, ERenderStyle style, double startroll, double rollvel, double rollacc, double fadeoutstep)
 {
+	if (r_particlelod > 0)
+	{
+		const double maxd2 = double(r_particlelod) * r_particlelod;
+		sector_t *sec = Level->PointInSector(pos.XY());
+		bool seen = false;
+		for (int i = 0; i < MAXPLAYERS && !seen; i++)
+		{
+			if (!Level->PlayerInGame(i)) continue;
+			AActor *cam = Level->Players[i]->camera ? Level->Players[i]->camera : Level->Players[i]->mo;
+			if (cam && (cam->PosRelative(sec) - pos).LengthSquared() < maxd2) seen = true;
+		}
+		if (!seen) return;
+	}
+
 	particle_t *particle = NewParticle(Level, !!(flags & SPF_REPLACE));
 
 	if (particle)
