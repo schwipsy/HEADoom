@@ -153,7 +153,11 @@ jobs:
 
     - name: Setup MSVC
       if: runner.os == 'Windows' && !contains(inputs.name, 'MinGW')
-      uses: ilammy/msvc-dev-cmd@v1 # FIXME: update this
+      shell: pwsh
+      # Same as ilammy/msvc-dev-cmd (x64), without the Node 20 action
+      run: |
+        $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+        cmd /c "`"$vs\VC\Auxiliary\Build\vcvars64.bat`" >nul && set" | ForEach-Object { if ($_ -match '^([^=]+)=(.*)$') { "$($Matches[1])=$($Matches[2])" } } | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
 
     - name: Setup MSYS2
       if: runner.os == 'Windows' && contains(inputs.name, 'MinGW')
@@ -161,6 +165,7 @@ jobs:
       with:
         msystem: MINGW64
         update: true
+        suppress-deprecation-warnings: msystem-mingw64
 
     - name: Dependencies
       env:
