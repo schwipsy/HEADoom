@@ -8,6 +8,8 @@
 
 struct sector_t;
 struct FRenderViewpoint;
+struct FLevelLocals;
+class AActor;
 
 enum { SPLITSCREEN_MAXVIEWS = 4 };
 
@@ -40,4 +42,8 @@ void G_QueueSplitNetEvent(int player, const FString& name, int arg1, int arg2, i
 void G_ClearSplitMenus();
 void G_TickSplitRevive();
 void G_DrawSplitReviveHud(int pnum);
+bool G_CoopReviveActive();
+bool G_CoopAllDownReload(FLevelLocals* Level, int playernum);
+bool G_AnyCoopPlayerAlive();
+void G_CoopCheckpoint(AActor* activator);
 bool G_SplitMenuAllowsPause();

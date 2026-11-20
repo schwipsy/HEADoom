@@ -1165,6 +1165,12 @@ class Inventory : Actor
 		pickedUp[pNum] = true;
 		DisableLocalRendering(pNum, true);
 		bCountItem = bCountSecret = false;
+
+		// Everyone has their copy now: the item is no longer needed.
+		for (int i; i < MAXPLAYERS; ++i)
+			if (playerInGame[i] && !pickedUp[i])
+				return;
+		GoAwayAndDie();
 	}
 
 	// Force spawn a new version of the item. This needs to use CreateCopy so that

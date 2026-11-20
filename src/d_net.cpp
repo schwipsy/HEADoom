@@ -30,6 +30,7 @@
 #include "d_eventbase.h"
 #include "d_main.h"
 #include "d_net.h"
+#include "g_splitscreen.h"
 #include "d_netinf.h"
 #include "events.h"
 #include "g_game.h"
@@ -165,6 +166,11 @@ CVAR(Bool, vid_dontdowait, false, CVAR_ARCHIVE|CVAR_GLOBALCONFIG)
 CVAR(Bool, vid_lowerinbackground, true, CVAR_ARCHIVE|CVAR_GLOBALCONFIG)
 
 CVAR(Bool, net_ticbalance, true, CVAR_SERVERINFO | CVAR_NOSAVE)
+// Online: tics of the other players' commands kept in reserve, so a late packet uses up the
+// reserve instead of freezing the game. Each tic adds ~29 ms of delay to the other players'
+// actions (your own movement is predicted). 0 = off.
+CVAR(Int, net_jitterbuffer, 2, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+static int JitterSlowTic = 0;
 CVAR(Bool, net_extratic, false, CVAR_SERVERINFO | CVAR_NOSAVE)
 CVAR(Bool, net_limitsaves, true, CVAR_SERVERINFO | CVAR_NOSAVE)
 CVAR(Bool, net_repeatableactioncooldown, true, CVAR_SERVERINFO | CVAR_NOSAVE)
@@ -2203,6 +2209,8 @@ static void CalculateNetStabilityBuffer(int diff)
 	}
 
 	StabilityBuffer = unstableCount > 0 ? static_cast<int>(ceil(total / unstableCount)) : 0;
+	// Never catch up (or let the host trim our lead) below the jitter buffer.
+	StabilityBuffer = max<int>(StabilityBuffer, clamp<int>(net_jitterbuffer, 0, 10));
 }
 
 //
@@ -2283,6 +2291,20 @@ void TryRunTics()
 		CalculateNetStabilityBuffer(availableTics - totalTics);
 		if (totalTics < availableTics - StabilityBuffer)
 			++runTics;
+
+		// Jitter buffer: while fewer tics than net_jitterbuffer are left in reserve after this
+		// frame, run one tic in eight later. That builds the reserve gradually (a short slowdown
+		// instead of a freeze) and the reserve then covers late packets.
+		const int target = clamp<int>(net_jitterbuffer, 0, 10);
+		if (netgame && !demoplayback && target > 0 && runTics > 0 && LevelStartStatus == LST_READY
+			&& availableTics - runTics < target)
+		{
+			if (++JitterSlowTic >= 8)
+			{
+				JitterSlowTic = 0;
+				--runTics;
+			}
+		}
 	}
 
 	const int worldTimer = primaryLevel->LocalWorldTimer;
@@ -2923,6 +2945,13 @@ void Net_DoCommand(int cmd, TArrayView<uint8_t>& stream, int player)
 		// autosave happened. And if it doesn't, we must not generate it.
 		if (!netgame && !demoplayback && disableautosave < 2 && autosavecount
 			&& players[player].playerstate == PST_LIVE && !deathmatch)
+		{
+			Net_WriteInt8(DEM_DOAUTOSAVE);
+		}
+		// Online co-op: only the host's request counts and only the host sends the save,
+		// so every PC saves exactly once, at the same tic. Skipped when everyone is down.
+		else if (netgame && !demoplayback && !deathmatch && player == Net_Arbitrator && consoleplayer == Net_Arbitrator
+			&& disableautosave < 2 && autosavecount && G_AnyCoopPlayerAlive())
 		{
 			Net_WriteInt8(DEM_DOAUTOSAVE);
 		}

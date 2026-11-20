@@ -1449,6 +1449,18 @@ DEFINE_ACTION_FUNCTION_NATIVE(AActor, CheckSight, P_CheckSight)
 	ACTION_RETURN_BOOL(P_CheckSight(self, target, flags));
 }
 
+bool P_PeekUse(AActor *usething);
+static int PeekUse(AActor *self)
+{
+	return P_PeekUse(self);
+}
+
+DEFINE_ACTION_FUNCTION_NATIVE(AActor, PeekUse, PeekUse)
+{
+	PARAM_SELF_PROLOGUE(AActor);
+	ACTION_RETURN_BOOL(P_PeekUse(self));
+}
+
 static void GiveSecret(AActor *self, bool printmessage, bool playsound)
 {
 	P_GiveSecret(self->Level, self, printmessage, playsound, -1);

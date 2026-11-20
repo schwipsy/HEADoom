@@ -138,7 +138,7 @@ extend class BaseStatusBar
 	{
 		if (!ScoreboardFont || GameState != GS_LEVEL || !CPlayer
 			|| (CPlayer.PlayerState != PST_DEAD && !IsScoreboardOpen())
-			|| (CPlayer.PlayerState == PST_DEAD && !IsScoreboardOpen() && splitscreen_players > 1))
+			|| (CPlayer.PlayerState == PST_DEAD && !IsScoreboardOpen() && (splitscreen_players > 1 || (netgame && !deathmatch && sv_coopreviving))))
 		{
 			return false;
 		}

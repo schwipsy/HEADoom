@@ -799,8 +799,8 @@ class PlayerPawn : Actor
 			}
 		}
 
-		// Splitscreen: while a partner is alive, wait to be revived (see g_splitrevive.cpp).
-		if (splitscreen_players > 1)
+		// Splitscreen and online co-op: while a partner is alive, wait to be revived (see g_splitrevive.cpp).
+		if (splitscreen_players > 1 || (netgame && !deathmatch && sv_coopreviving))
 		{
 			for (int i = 0; i < MAXPLAYERS; i++)
 			{

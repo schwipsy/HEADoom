@@ -1346,6 +1346,8 @@ void DAutosaver::Tick ()
 
 extern gamestate_t 	wipegamestate;
 
+void G_CoopScaleMonsters(FLevelLocals* Level);
+
 void G_DoLoadLevel(const FString &nextmapname, int position, bool autosave, bool newGame)
 {
 	gamestate_t oldgs = gamestate;
@@ -1463,6 +1465,9 @@ void FLevelLocals::DoLoadLevel(const FString &nextmapname, int position, bool au
 	}
 
 	P_SetupLevel (this, position, newGame);
+
+	// Co-op: more monsters / tougher bosses for extra players (a snapshot or savegame replaces this)
+	if (!savegamerestore) G_CoopScaleMonsters(this);
 
 
 

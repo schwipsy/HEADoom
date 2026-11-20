@@ -5955,6 +5955,73 @@ void P_UseLines(player_t *player)
 
 //==========================================================================
 //
+// P_PeekUse
+//
+// Dry run of P_UseLines: true when pressing Use right now would activate
+// something (a usable line, a thing with a use special, or a thing whose
+// class overrides Used()). Activates nothing. Drives the "press Use" prompt.
+//
+//==========================================================================
+
+bool P_PeekUse(AActor *usething)
+{
+	static unsigned VIndex = ~0u;
+	static VMFunction *baseUsed = nullptr;
+	if (VIndex == ~0u)
+	{
+		VIndex = GetVirtualIndex(RUNTIME_CLASS(AActor), "Used");
+		baseUsed = RUNTIME_CLASS(AActor)->Virtuals[VIndex];
+	}
+
+	DVector2 start = usething->GetPortalTransition(usething->Height / 2).XY();
+	DVector2 end = start + usething->Angles.Yaw.ToVector(usething->FloatVar(NAME_UseRange));
+	FPathTraverse it(usething->Level, start.X, start.Y, end.X, end.Y, PT_ADDLINES | PT_ADDTHINGS);
+	DVector3 xpos = { start.X, start.Y, usething->Z() };
+	intercept_t *in;
+
+	while ((in = it.Next()))
+	{
+		if (!in->isaline)
+		{
+			AActor *mobj = in->d.thing;
+			if (mobj == usething) continue;
+			if ((mobj->flags5 & MF5_USESPECIAL) && mobj->special) return true;
+			auto &virt = mobj->GetClass()->Virtuals;
+			if (VIndex < virt.Size() && virt[VIndex] != baseUsed) return true;
+			continue;
+		}
+		if (it.PortalRelocate(in, PT_ADDLINES | PT_ADDTHINGS, &xpos)) continue;
+
+		line_t *ld = in->d.line;
+		// An open manual door (door special with tag 0 = this line's own back sector, and the
+		// player fits through the opening) gets no prompt. Switches, also on lower/upper
+		// textures, and doors that open another tagged sector always get one.
+		bool openDoor = false;
+		const int sp = ld->special;
+		const bool manualDoor = ld->args[0] == 0 && (sp == Door_Close || sp == Door_Open || sp == Door_Raise ||
+			sp == Door_LockedRaise || sp == Door_Animated || sp == Door_WaitRaise || sp == Door_WaitClose ||
+			sp == Generic_Door || sp == Door_CloseWaitOpen || sp == Door_AnimatedClose);
+		if (manualDoor && ld->backsector != nullptr && !(ld->flags & (ML_BLOCKEVERYTHING | ML_BLOCKUSE)))
+		{
+			FLineOpening op;
+			P_LineOpening(op, NULL, ld, it.InterceptPoint(in));
+			openDoor = op.range >= usething->Height;
+		}
+		if (ld->special != 0 && !openDoor)
+		{
+			const bool back = P_PointOnLineSide(xpos.XY(), ld) == 1;
+			if (back ? (ld->activation & SPAC_UseBack) : (ld->activation & (SPAC_Use | SPAC_UseThrough))) return true;
+		}
+		if (ld->flags & (ML_BLOCKEVERYTHING | ML_BLOCKUSE)) return false;
+		FLineOpening open;
+		P_LineOpening(open, NULL, ld, it.InterceptPoint(in));
+		if (open.range <= 0) return false;	// a wall: Use stops here
+	}
+	return false;
+}
+
+//==========================================================================
+//
 // P_UsePuzzleItem
 //
 // Returns true if the puzzle item was used on a line or a thing.

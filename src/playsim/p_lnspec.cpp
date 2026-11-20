@@ -46,6 +46,7 @@
 #include "s_sndseq.h"
 #include "v_palette.h"
 #include "vm.h"
+#include "g_splitscreen.h"
 
 // Remaps EE sector change types to Generic_Floor values. According to the Eternity Wiki:
 /*
@@ -3154,6 +3155,8 @@ FUNC(LS_TranslucentLine)
 
 FUNC(LS_Autosave)
 {
+	// Co-op checkpoint: downed partners' bodies come to the player who reached it.
+	G_CoopCheckpoint(it);
 	if (gameaction != ga_savegame && gameaction != ga_quicksave)
 	{
 		Level->flags2 &= ~LEVEL2_NOAUTOSAVEHINT;

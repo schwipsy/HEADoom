@@ -7,6 +7,11 @@
 // they fell with SPLITREVIVE_HEALTH. When every local player is down, Use loads the
 // last save like in singleplayer.
 //
+// Online co-op works the same way (sv_coopreviving, on by default): a dead player
+// waits for a partner, and when everyone is down Use loads the last save on every
+// PC (or restarts the map if there is none). The revive settings are server cvars
+// there, so the host's values apply.
+//
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 
@@ -26,13 +31,66 @@
 
 int G_GetLocalPlayers(int out[MAXPLAYERS]);
 
-CVAR(Int, splitscreen_revive_seconds, 6, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
-CVAR(Int, splitscreen_revive_health, 25, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
-CVAR(Float, splitscreen_revive_range, 96.f, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+#include "g_game.h"
+#include "cmdlib.h"
+#include "resourcefile.h"
+#include "serializer.h"
+#include <memory>
+
+extern FString BackupSaveName;
+
+// True if the save is a co-op save made with exactly the players in this game.
+static bool IsSaveForThisCoopGame(const FString& file)
+{
+	if (file.Len() == 0 || !FileExists(file))
+		return false;
+	std::unique_ptr<FResourceFile> res(FResourceFile::OpenResourceFile(file.GetChars(), true));
+	if (res == nullptr)
+		return false;
+	const auto entry = res->FindEntry("info.json");
+	if (entry < 0)
+		return false;
+	auto data = res->Read(entry);
+	FSerializer arc;
+	if (!arc.OpenReader(data.string(), data.size()))
+		return false;
+	int saved = 0;
+	arc("CoopPlayers", saved);
+	int now = 0;
+	for (int i = 0; i < MAXPLAYERS; i++) if (playeringame[i]) now |= 1 << i;
+	return saved != 0 && saved == now;
+}
+extern FString savename;
+
+CVAR(Int, splitscreen_revive_seconds, 6, CVAR_ARCHIVE | CVAR_GLOBALCONFIG | CVAR_SERVERINFO)
+CVAR(Int, splitscreen_revive_health, 25, CVAR_ARCHIVE | CVAR_GLOBALCONFIG | CVAR_SERVERINFO)
+CVAR(Float, splitscreen_revive_range, 96.f, CVAR_ARCHIVE | CVAR_GLOBALCONFIG | CVAR_SERVERINFO)
+CVAR(Bool, sv_coopreviving, true, CVAR_ARCHIVE | CVAR_SERVERINFO)	// online co-op: revive partners, reload when everyone is down
+// HUD: 1 while this PC's player is down and a partner can still revive them (SBARINFO hides the death screen)
+CVAR(Int, hud_coopwaitrevive, 0, CVAR_NOSET | CVAR_NOSAVE)
 
 static int ReviveProgress[MAXPLAYERS];	// tics of reviving done on this (dead) player
 static int ReviveBy[MAXPLAYERS];		// player reviving them, -1 if none
 static int ReviveTarget[MAXPLAYERS];	// for living players: the downed partner in reach, -1 if none
+
+// Everyone who takes part: all players online, the local players in splitscreen.
+static int GetCoopPlayers(int out[MAXPLAYERS])
+{
+	if (!netgame)
+		return G_GetLocalPlayers(out);
+	int count = 0;
+	for (int i = 0; i < MAXPLAYERS; i++)
+		if (playeringame[i]) out[count++] = i;
+	return count;
+}
+
+bool G_CoopReviveActive()
+{
+	if (deathmatch || (netgame && !sv_coopreviving))
+		return false;
+	int list[MAXPLAYERS];
+	return GetCoopPlayers(list) > 1;
+}
 
 static int ReviveTics()
 {
@@ -58,12 +116,13 @@ static bool IsUp(int pnum)
 void G_TickSplitRevive()
 {
 	int locals[MAXPLAYERS];
-	const int count = G_GetLocalPlayers(locals);
+	const int count = GetCoopPlayers(locals);
 	for (int i = 0; i < MAXPLAYERS; i++)
 		ReviveTarget[i] = -1;
-	if (count <= 1)
+	if (!G_CoopReviveActive())
 	{
 		for (int i = 0; i < MAXPLAYERS; i++) { ReviveProgress[i] = 0; ReviveBy[i] = -1; }
+		if (hud_coopwaitrevive != 0) { UCVarValue v; v.Int = 0; hud_coopwaitrevive->ForceSet(v, CVAR_Int); }
 		return;
 	}
 
@@ -118,6 +177,95 @@ void G_TickSplitRevive()
 			if (ReviveProgress[down] > 0) ReviveProgress[down]--;	// drains back slowly when let go
 		}
 	}
+
+	// local HUD state only (not part of the game)
+	bool partnerUp = false;
+	for (int a = 0; a < count; a++)
+		if (locals[a] != consoleplayer && IsUp(locals[a])) partnerUp = true;
+	const int wait = IsDown(consoleplayer) && partnerUp ? 1 : 0;
+	if (hud_coopwaitrevive != wait)
+	{
+		UCVarValue v; v.Int = wait;
+		hud_coopwaitrevive->ForceSet(v, CVAR_Int);
+	}
+}
+
+//==========================================================================
+//
+// Called from DoReborn for a player who pressed Use while dead. Online, when
+// nobody is up any more, loads the last save on every PC (all PCs save the same
+// games, so every PC has it) or restarts the map. Returns true if it handled it.
+//
+//==========================================================================
+
+bool G_CoopAllDownReload(FLevelLocals* Level, int playernum)
+{
+	if (!netgame || !G_CoopReviveActive() || players[playernum].playerstate != PST_REBORN)
+		return false;
+	int list[MAXPLAYERS];
+	const int count = GetCoopPlayers(list);
+	for (int i = 0; i < count; i++)
+		if (IsUp(list[i])) return false;
+
+	players[playernum].playerstate = PST_DEAD;	// stays down until the load / restart happens
+	if (gameaction != ga_nothing)
+		return true;
+	// Only a co-op save with these same players (from today or another day); otherwise restart the map.
+	if (IsSaveForThisCoopGame(BackupSaveName))
+	{
+		savename = BackupSaveName;
+		gameaction = ga_autoloadgame;
+	}
+	else
+	{
+		Level->ChangeLevel(Level->MapName.GetChars(), 0, CHANGELEVEL_NOINTERMISSION | CHANGELEVEL_RESETINVENTORY | CHANGELEVEL_RESETHEALTH, -1);
+	}
+	return true;
+}
+
+bool G_AnyCoopPlayerAlive()
+{
+	for (int i = 0; i < MAXPLAYERS; i++)
+		if (IsUp(i)) return true;
+	return false;
+}
+
+//==========================================================================
+//
+// Checkpoints: when a living player triggers an autosave (ACS Autosave() or
+// the Autosave line special), the bodies of downed partners are brought next
+// to them, so they can be revived there (and the save has them there too).
+//
+//==========================================================================
+
+bool G_FindSpotNear(AActor* orig, DVector3& out);
+
+void G_CoopCheckpoint(AActor* activator)
+{
+	if (activator == nullptr || activator->player == nullptr || !G_CoopReviveActive())
+		return;
+	const int who = int(activator->player - players);
+	if (!IsUp(who))
+		return;
+	int list[MAXPLAYERS];
+	const int count = GetCoopPlayers(list);
+	for (int i = 0; i < count; i++)
+	{
+		const int down = list[i];
+		if (!IsDown(down) || players[down].mo->Level != activator->Level)
+			continue;
+		AActor* body = players[down].mo;
+		DVector3 pos;
+		if (!G_FindSpotNear(activator, pos))
+			pos = activator->Pos();
+		body->Vel.Zero();
+		body->SetOrigin(pos, false);
+		body->floorz = activator->floorz;	// refined by the next movement tick
+		body->ClearInterpolation();
+		ReviveProgress[down] = 0;
+		ReviveBy[down] = -1;
+		Printf("%s was brought to the checkpoint.\n", players[down].userinfo.GetName());
+	}
 }
 
 //==========================================================================
@@ -143,7 +291,7 @@ static void DrawBar(double y, double scale, double frac)
 
 void G_DrawSplitReviveHud(int pnum)
 {
-	if (gSplitFrame.count <= 1 || pnum < 0 || pnum >= MAXPLAYERS || !playeringame[pnum])
+	if (!G_CoopReviveActive() || pnum < 0 || pnum >= MAXPLAYERS || !playeringame[pnum])
 		return;
 	const double scale = max(1., twod->GetHeight() / 270.);
 	const double y = twod->GetHeight() * 0.62;
@@ -152,13 +300,14 @@ void G_DrawSplitReviveHud(int pnum)
 
 	if (IsDown(pnum))
 	{
-		// (consoleplayer is swapped while the HUD is drawn, so use the drawn views as the player list)
 		bool partnerUp = false;
-		for (int i = 0; i < gSplitFrame.count; i++)
-			if (gSplitFrame.player[i] != pnum && IsUp(gSplitFrame.player[i])) partnerUp = true;
+		for (int i = 0; i < MAXPLAYERS; i++)
+			if (i != pnum && IsUp(i)) partnerUp = true;
 
 		if (!partnerUp)
 		{
+			if (netgame && gSplitFrame.count <= 1)
+				return;	// the status bar shows the death screen (Use loads the last save)
 			FString msg;
 			msg.Format("Everyone is down. Press %s to load the last save", useKey);
 			DrawCentered(msg.GetChars(), y, scale, CR_RED);

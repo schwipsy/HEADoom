@@ -47,6 +47,7 @@
 #include "filesystem.h"
 #include "fs_findfile.h"
 #include "g_game.h"
+#include "g_splitscreen.h"
 #include "g_hub.h"
 #include "g_levellocals.h"
 #include "gi.h"
@@ -1796,6 +1797,11 @@ void FLevelLocals::QueueBody (AActor *body)
 //
 void FLevelLocals::DoReborn (int playernum, bool force)
 {
+	// Online co-op with everyone down: load the last save instead of respawning.
+	// (Not for forced reborns: a map change revives dead players that way.)
+	if (!force && G_CoopAllDownReload(this, playernum))
+		return;
+
 	if (!multiplayer && !(flags2 & LEVEL2_ALLOWRESPAWN) && !sv_singleplayerrespawn &&
 		!G_SkillProperty(SKILLP_PlayerRespawn))
 	{
@@ -2290,8 +2296,8 @@ CCMD(opensaves)
 
 void G_DoAutoSave ()
 {
-	// Never autosave in netgames since you can't load this properly anyway.
-	if (netgame)
+	// Online co-op autosaves (every PC writes the same save; loaded when everyone is down).
+	if (netgame && deathmatch)
 		return;
 
 	FString description;
@@ -2478,6 +2484,13 @@ void G_DoSaveGame (bool okForQuicksave, bool forceQuicksave, FString filename, c
 		("GameUUID", GameUUID)
 		.AddString("Title", description)
 		.AddString("Current Map", primaryLevel->MapName.GetChars());
+	{
+		// Co-op: which player slots were in the game (checked before an everyone-down reload)
+		int coopPlayers = 0;
+		if (multiplayer && !deathmatch)
+			for (int i = 0; i < MAXPLAYERS; i++) if (playeringame[i]) coopPlayers |= 1 << i;
+		savegameinfo("CoopPlayers", coopPlayers);
+	}
 
 	TArray<const char *> allowLoadIn {ALLOWLOADIN};
 

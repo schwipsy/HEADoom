@@ -190,6 +190,7 @@ CVAR(Bool, am_followplayer, true, CVAR_ARCHIVE)
 CVAR(Bool, am_portaloverlay, true, CVAR_ARCHIVE)
 CVAR(Bool, am_showgrid, false, CVAR_ARCHIVE)
 CVAR(Float, am_zoomdir, 0.f, CVAR_ARCHIVE)
+CVAR(Float, am_startzoom, 5.f, CVAR_ARCHIVE) // how far the map is zoomed in when a level starts (1 = whole map)
 
 static const char *const DEFAULT_FONT_NAME = "AMMNUMx";
 CVAR(String, am_markfont, DEFAULT_FONT_NAME, CVAR_ARCHIVE)
@@ -1417,6 +1418,7 @@ void DAutomap::LevelInit ()
 	scale_mtof = min_scale_mtof / 0.7;
 	if (scale_mtof > max_scale_mtof)
 		scale_mtof = min_scale_mtof;
+	scale_mtof = min(scale_mtof * max(1.f, *am_startzoom), max_scale_mtof);
 	scale_ftom = 1.0 / scale_mtof;
 
 	UpdateShowAllLines();

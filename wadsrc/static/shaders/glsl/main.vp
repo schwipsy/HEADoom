@@ -110,8 +110,17 @@ void main()
 			ClipDistance4 = worldcoord.y - ((uSplitBottomPlane.w + uSplitBottomPlane.x * worldcoord.x + uSplitBottomPlane.y * worldcoord.z) * uSplitBottomPlane.z);
 		}
 
-		vWorldNormal = vec4(normalize((NormalModelMatrix * vec4(normalize(bones.Normal), 1.0)).xyz), 1.0);
-		vEyeNormal = vec4(normalize((NormalViewMatrix * vec4(normalize(vWorldNormal.xyz), 1.0)).xyz), 1.0);
+		if (dot(bones.Normal, bones.Normal) > 0.000001)
+		{
+			vWorldNormal = vec4(normalize((NormalModelMatrix * vec4(normalize(bones.Normal), 1.0)).xyz), 1.0);
+			vEyeNormal = vec4(normalize((NormalViewMatrix * vec4(normalize(vWorldNormal.xyz), 1.0)).xyz), 1.0);
+		}
+		else
+		{
+			// No normal (e.g. the sky): the G-buffer gets a zero normal, which the AO pass skips.
+			vWorldNormal = vec4(0.0, 0.0, 0.0, 1.0);
+			vEyeNormal = vec4(0.0, 0.0, 0.0, 1.0);
+		}
 	#endif
 
 	#ifdef SPHEREMAP

@@ -49,6 +49,7 @@ void HWSkyPortal::DrawContents(HWDrawInfo *di, FRenderState &state)
 	state.EnableFog(false);
 	state.AlphaFunc(Alpha_GEqual, 0.f);
 	state.SetRenderStyle(STYLE_Translucent);
+	state.SetNormal(0, 0, 0);	// zero normal in the G-buffer: no ambient occlusion on the sky (or on sky walls in front of it)
 	bool oldClamp = state.SetDepthClamp(true);
 
 	di->SetupView(state, 0, 0, 0, !!(mState->MirrorFlag & 1), !!(mState->PlaneMirrorFlag & 1));

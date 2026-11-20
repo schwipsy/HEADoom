@@ -1466,6 +1466,8 @@ void D_Display ()
 			else
 			{
 				drawHud(viewsec, false);
+				if (netgame && !automapactive)
+					G_DrawSplitReviveHud(consoleplayer);	// online co-op revive prompts
 			}
 			//stb.Unclock();
 			//Printf("Stbar = %f\n", stb.TimeMS());
@@ -2553,8 +2555,9 @@ static void CheckCmdLine()
 		deathmatch = 1;
 		flags |= DF_WEAPONS_STAY | DF_ITEMS_RESPAWN;
 	}
-	else if (Args->CheckParm(FArg_coop))
+	else if (Args->CheckParm(FArg_coop) || Args->CheckParm(FArg_host))
 	{
+		// Hosting without -deathmatch is co-op: per-player pickups (sv_localitems) and the other co-op defaults.
 		deathmatch = teamplay = 0;
 		flags |= DF_NO_COOP_WEAPON_SPAWN;
 		flags3 |= DF3_NO_PLAYER_CLIP | DF3_COOP_SHARE_KEYS | DF3_REMEMBER_LAST_WEAP;

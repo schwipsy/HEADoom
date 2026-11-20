@@ -798,6 +798,7 @@ set (PCH_SOURCES
 	g_splitscreen.cpp
 	g_splitmenu.cpp
 	g_splitrevive.cpp
+	g_coopscale.cpp
 	g_steampipe.cpp
 	g_graphicspreset.cpp
 	g_hub.cpp
