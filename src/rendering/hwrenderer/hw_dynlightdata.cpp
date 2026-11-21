@@ -47,10 +47,15 @@ DVector3 hw_LightCullViewPos;
 
 static constexpr float LIGHT_CULL_FADE = 0.15f; // fraction of the cull distance used for fading out
 
+// Splitscreen: shorter light and shadow distances (fraction of the normal ones).
+extern bool hw_SplitscreenActive;
+CVAR(Float, splitscreen_shadowdist, 0.5f, CVAR_ARCHIVE)
+CVAR(Float, splitscreen_lightdist, 0.75f, CVAR_ARCHIVE)
+
 // group: measure from the light as seen in that portal group, so lights across linked portals are not culled by their far-away map position.
 float hw_LightDistanceFade(FDynamicLight* light, const DVector3& viewpos, int group)
 {
-	const float maxdist = r_light_distance_cull;
+	const float maxdist = r_light_distance_cull * (hw_SplitscreenActive ? float(splitscreen_lightdist) : 1.f);
 	if (maxdist <= 0.f)
 		return 1.f;
 
@@ -67,7 +72,7 @@ float hw_LightDistanceFade(FDynamicLight* light, const DVector3& viewpos, int gr
 
 bool hw_LightShadowCulled(FDynamicLight* light, const DVector3& viewpos, int group)
 {
-	const double maxdist = r_light_shadow_distance_cull;
+	const double maxdist = r_light_shadow_distance_cull * (hw_SplitscreenActive ? double(splitscreen_shadowdist) : 1.);
 	return maxdist > 0. && ((group >= 0 ? light->PosRelative(group) : light->Pos) - viewpos).LengthSquared() > maxdist * maxdist;
 }
 

@@ -335,6 +335,8 @@ void FDynamicLight::Tick()
 
 
 
+CVAR(Bool, r_extralights, true, CVAR_ARCHIVE)
+
 //==========================================================================
 //
 //
@@ -388,6 +390,13 @@ void FDynamicLight::UpdateLocation()
 		}
 		radius = intensity * 2.0f;
 		if (radius < m_currentRadius * 2) radius = m_currentRadius * 2;
+
+		// Fast lights skip shadows; lights faster than the fastest tracer (150) and, with
+		// r_extralights off, tracer lights are dropped (radius 0 unlinks them).
+		const double speed = target->Vel.Length();
+		fastmoving = speed > 30.;
+		static const FName nTracer("_ZTracer"), nTracerSmall("_ZTracerSmall");
+		if (speed > 150. || (!r_extralights && (target->IsKindOf(nTracer) || target->IsKindOf(nTracerSmall)))) radius = 0;
 
 		if (X() != oldx || Y() != oldy || radius != oldradius)
 		{
@@ -622,7 +631,7 @@ void FDynamicLight::CollectWithinRadius(const DVector3 &opos, FSection *section,
 			}
 		}
 	}
-	shadowmapped = hitonesidedback && !DontShadowmap();
+	shadowmapped = hitonesidedback && !DontShadowmap() && !fastmoving;
 }
 
 //==========================================================================

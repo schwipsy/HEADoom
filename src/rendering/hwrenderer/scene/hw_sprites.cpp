@@ -63,6 +63,15 @@ const float MY_SQRT2    = 1.41421356237309504880; // sqrt(2)
 EXTERN_CVAR(Bool, r_debug_disable_vis_filter)
 EXTERN_CVAR(Float, transsouls)
 EXTERN_CVAR(Float, r_sprite_distance_cull)
+#include <mutex>
+#include <vector>
+#include <algorithm>
+CVAR(Float, splitscreen_spritedist, 0.6f, CVAR_ARCHIVE)
+// 0 off, 1 only in splitscreen, 2 always (Low presets): far particles are drawn every other one
+CVAR(Int, r_particlethin, 1, CVAR_ARCHIVE)
+// Particles and visual thinkers fade out towards this distance and are not drawn past it (0 = no limit)
+CVAR(Float, r_particledrawdist, 2000.f, CVAR_ARCHIVE)
+extern bool hw_SplitscreenActive;
 EXTERN_CVAR(Float, r_actorspriteshadowalpha)
 EXTERN_CVAR(Float, r_actorspriteshadowfadeheight)
 
@@ -804,8 +813,13 @@ void HWSprite::Process(HWDrawInfo *di, AActor* thing, sector_t * sector, area_t 
 		return;
 
 	// Distance culling, ported from LZDoom. 0 disables it.
-	if (r_sprite_distance_cull > 0.f && (thing->Pos() - di->Viewpoint.Pos).LengthSquared() > double(r_sprite_distance_cull) * r_sprite_distance_cull)
-		return;
+	// Splitscreen draws every sprite once per view, so it uses a shorter distance (splitscreen_spritedist).
+	if (r_sprite_distance_cull > 0.f)
+	{
+		const double cull = r_sprite_distance_cull * (hw_SplitscreenActive ? double(splitscreen_spritedist) : 1.);
+		if ((thing->Pos() - di->Viewpoint.Pos).LengthSquared() > cull * cull)
+			return;
+	}
 
 	// [ZZ] allow CustomSprite-style direct picnum specification
 	bool isPicnumOverride = thing->picnum.isValid();
@@ -1476,13 +1490,34 @@ void HWSprite::ProcessParticle(HWDrawInfo *di, particle_t *particle, sector_t *s
 	if (!particle || particle->alpha <= 0)
 		return;
 
+	// Splitscreen draws every particle once per view: skip every other one that isn't close to this
+	// view's player. Chosen by the particle's slot, so a particle is always shown or always hidden.
+	if (r_particlethin >= 2 || (r_particlethin == 1 && hw_SplitscreenActive))
+	{
+		const double neard = 256.;
+		const DVector3 d = DVector3(particle->Pos) - di->Viewpoint.Pos;
+		const uintptr_t key = spr ? uintptr_t(spr) >> 6 : uintptr_t(particle - di->Level->Particles.Data());
+		if ((key & 1) && d.LengthSquared() > neard * neard)
+			return;
+	}
+
 	if (spr && !spr->ValidTexture())
 		return;
+
+	float distfade = 1.f;
+	if (r_particledrawdist > 0)
+	{
+		const double maxd = r_particledrawdist;
+		const double d2 = (DVector3(particle->Pos) - di->Viewpoint.Pos).LengthSquared();
+		if (d2 >= maxd * maxd) return;
+		const double fadestart = maxd * 0.8;
+		if (d2 > fadestart * fadestart) distfade = float((maxd - sqrt(d2)) / (maxd - fadestart));
+	}
 
 	lightlevel = RescaleLightLevel(spr ? spr->GetLightLevel(sector) : sector->GetSpriteLight());
 	foglevel = (uint8_t)clamp<short>(sector->lightlevel, 0, 255);
 
-	trans = particle->alpha;
+	trans = particle->alpha * distfade;
 	OverrideShader = (particle->flags & SPF_ALLOWSHADERS) ? -1 : 0;
 	modelframe = nullptr;
 	texture = nullptr;

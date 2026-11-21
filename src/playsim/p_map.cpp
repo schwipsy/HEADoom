@@ -6289,6 +6289,35 @@ int P_RadiusAttack(AActor *bombspot, AActor *bombsource, int bombdamage, double 
 		return 0;
 	fulldamagedistance = clamp<double>(fulldamagedistance, 0.0, bombdistance - 1.0);
 
+	// Headcutter: explosions push the loose debris, casings and smoke (FXPush.Blast, if the game defines it).
+	static VMFunction *blastfunc = nullptr;
+	static bool blastlooked = false;
+	if (!blastlooked) { blastlooked = true; blastfunc = PClass::FindFunction("FXPush", "Blast"); }
+	if (blastfunc)
+	{
+		VMValue params[] = { bombspot, bombdistance };
+		VMCall(blastfunc, params, 2, nullptr, 0);
+
+		// ...and lifts the plain particles near it a little (off with hc_fxinteract 0, like the rest).
+		FBaseCVar *inter = FindCVar("hc_fxinteract", nullptr);
+		if (bombdistance >= 32 && (!inter || inter->GetGenericRep(CVAR_Int).Int > 0))
+		{
+			auto Level = bombspot->Level;
+			double r = bombdistance * 1.5;
+			for (uint16_t i = Level->ActiveParticles; i != NO_PARTICLE; i = Level->Particles[i].tnext)
+			{
+				particle_t &p = Level->Particles[i];
+				if (p.Acc.Z >= 0) continue;	// no gravity to bring it back down: it would rise forever
+				DVector3 d = p.Pos - bombspot->Pos();
+				double l = d.Length();
+				if (l >= r) continue;
+				double f = 1.0 - l / r;
+				p.Vel.Z += float(2.5 * f);
+				if (l > 0) { p.Vel.X += float(d.X / l * f); p.Vel.Y += float(d.Y / l * f); }
+			}
+		}
+	}
+
 	FPortalGroupArray grouplist(FPortalGroupArray::PGA_Full3d);
 	FMultiBlockThingsIterator it(grouplist, bombspot->Level, bombspot->X(), bombspot->Y(), bombspot->Z() - bombdistance, bombspot->Height + bombdistance*2.0, bombdistance, false, bombspot->Sector);
 	FMultiBlockThingsIterator::CheckResult cres;

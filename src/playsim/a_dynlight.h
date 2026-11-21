@@ -299,6 +299,7 @@ public:
 	bool m_active;
 	bool visibletoplayer;
 	bool shadowmapped;
+	bool fastmoving = false;	// moving too fast for its shadows to be worth drawing
 	uint8_t lighttype;
 	bool owned;
 	bool swapped;

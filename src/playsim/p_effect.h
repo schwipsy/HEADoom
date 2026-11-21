@@ -72,6 +72,7 @@ enum EParticleFlags
 	SPF_FADE_IN_OUT				= 1 << 16,
 	SPF_FADE_IN_HOLD_OUT		= 1 << 17,
 	SPF_NODYNAMICLIGHTING		= 1 << 18,
+	SPF_ALWAYSSPAWN				= 1 << 19,	// skip the off-view cull (explosions, destruction)
 };
 
 class DVisualThinker;

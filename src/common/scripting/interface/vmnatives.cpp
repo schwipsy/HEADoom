@@ -574,6 +574,36 @@ DEFINE_ACTION_FUNCTION_NATIVE(_TexMan, UseGamePalette, UseGamePalette)
 	ACTION_RETURN_INT(UseGamePalette(texid));
 }
 
+// Average color of a texture, for effects that take the color of the surface they come off.
+// The bitmap is only read the first time a texture is asked for.
+PalEntry averageColor(const uint32_t* data, int size, int maxout);
+static int GetAverageColor(int index)
+{
+	static TMap<int, uint32_t> cache;
+	if (auto c = cache.CheckKey(index)) return *c;
+	PalEntry col(255, 255, 255, 255);
+	auto tex = TexMan.GameByIndex(index, false);
+	if (tex && tex->isValid())
+	{
+		FBitmap bmp = tex->GetTexture()->GetBgraBitmap(nullptr);
+		// only opaque pixels count, so a sprite's empty border doesn't darken it
+		auto px = (const PalEntry*)bmp.GetPixels();
+		uint64_t r = 0, g = 0, b = 0, n = 0;
+		for (int i = 0, sz = px ? bmp.GetWidth() * bmp.GetHeight() : 0; i < sz; i++)
+			if (px[i].a >= 128) { r += px[i].r; g += px[i].g; b += px[i].b; n++; }
+		if (n) col = PalEntry(255, uint8_t(r / n), uint8_t(g / n), uint8_t(b / n));
+	}
+	cache[index] = col;
+	return col;
+}
+
+DEFINE_ACTION_FUNCTION_NATIVE(_TexMan, GetAverageColor, GetAverageColor)
+{
+	PARAM_PROLOGUE;
+	PARAM_INT(texid);
+	ACTION_RETURN_INT(GetAverageColor(texid));
+}
+
 FCanvas *GetTextureCanvas(const FString &texturename, ETextureType type, BITFIELD flags);
 
 DEFINE_ACTION_FUNCTION(_TexMan, GetCanvas)

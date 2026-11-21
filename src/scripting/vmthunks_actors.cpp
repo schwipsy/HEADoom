@@ -47,6 +47,7 @@
 #include "p_effect.h"
 #include "p_spec.h"
 #include "actorinlines.h"
+#include "models.h"
 #include "p_enemy.h"
 #include "gi.h"
 #include "shadowinlines.h"
@@ -437,6 +438,28 @@ DEFINE_ACTION_FUNCTION_NATIVE(AActor, Thrust, Thrust)
 	PARAM_FLOAT(angle);
 	Thrust(self, speed, angle);
 	return 0;
+}
+
+// The texture a 3D model actor is drawn with: its MODELDEF skin, else its own skin override
+// (overrides can be runtime canvases, e.g. bullet-hole skins, which have no pixels to read).
+static int GetModelSkin(AActor *self)
+{
+	FSpriteModelFrame *smf = FindModelFrame(self, self->sprite, self->frame, false);
+	for (int f = 0; !smf && f < 26; f++) smf = FindModelFrame(self, self->sprite, f, false);	// this frame may have no model of its own
+	if (smf)
+	{
+		for (auto &t : smf->skinIDs) if (t.isValid()) return t.GetIndex();
+		for (auto &t : smf->surfaceskinIDs) if (t.isValid()) return t.GetIndex();
+	}
+	if (self->modelData != nullptr)
+		for (auto &t : self->modelData->skinIDs) if (t.isValid()) return t.GetIndex();
+	return 0;
+}
+
+DEFINE_ACTION_FUNCTION_NATIVE(AActor, GetModelSkin, GetModelSkin)
+{
+	PARAM_SELF_PROLOGUE(AActor);
+	ACTION_RETURN_INT(GetModelSkin(self));
 }
 
 static double AngleTo(AActor *self, AActor *targ, bool absolute)

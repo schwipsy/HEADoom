@@ -942,6 +942,13 @@ OptionValue VanillaTrans
 	3, "$OPTVAL_VTAVANILLA"
 }
 
+OptionValue ParticleThinModes
+{
+	0, "$OPTVAL_OFF"
+	1, "$DSPLYMNU_PARTICLETHIN_SPLIT"
+	2, "$OPTVAL_ALWAYS"
+}
+
 OptionValue GraphicsPresets
 {
 	0, "Custom"
@@ -983,6 +990,11 @@ OptionMenu "VideoOptions" protected
 	Option "$DSPLYMNU_BLOODTYPE",              cl_bloodtype,           BloodTypes
 	Option "$DSPLYMNU_PUFFTYPE",               cl_pufftype,            PuffTypes
 	Slider "$DSPLYMNU_MAXPARTICLES",           r_maxparticles,         100, 10000, 100, 0
+	Option "$DSPLYMNU_PARTICLEVIEWCULL",       r_particleviewcull,     OnOff
+	Slider "$DSPLYMNU_PARTICLELOD",            r_particlelod,          0, 8192, 256, 0
+	Option "$DSPLYMNU_PARTICLETHIN",           r_particlethin,         ParticleThinModes
+	Slider "$DSPLYMNU_PARTICLELIFESCALE",      r_particlelifescale,    0.1, 1.0, 0.05, 2
+	Slider "$DSPLYMNU_PARTICLEDRAWDIST",       r_particledrawdist,     0, 8192, 250, 0
 	Slider "$DSPLYMNU_MAXDECALS",              cl_maxdecals,           0, 10000, 100, 0
 	Option "$DSPLYMNU_PLAYERSPRITES",          r_drawplayersprites,    OnOff
 	Option "$DSPLYMNU_DEATHCAM",               r_deathcamera,          OnOff
@@ -1413,6 +1425,7 @@ OptionMenu "GLLightOptions" protected
 	Option "$GLLIGHTMNU_LIGHTSHADOWMAP",        gl_light_shadowmap,   YesNo
 	Option "$GLLIGHTMNU_LIGHTSHADOWMAPQUALITY", gl_shadowmap_quality, ShadowMapQuality
 	Option "$GLLIGHTMNU_LIGHTSHADOWMAPFILTER",  gl_shadowmap_filter,  ShadowMapFilter
+	Option "$GLLIGHTMNU_EXTRALIGHTS",           r_extralights,        OnOff
 }
 
 OptionMenu "OpenGLOptions" protected

@@ -25,6 +25,7 @@ extern bool hw_SplitscreenActive;
 #include "r_utility.h"
 #include "d_player.h"
 #include "i_time.h"
+#include "c_dispatch.h"
 #include "swrenderer/r_swscene.h"
 #include "swrenderer/r_renderer.h"
 #include "hw_dynlightdata.h"
@@ -64,6 +65,10 @@ EXTERN_CVAR(Int, vr_mode)
 extern bool automapactive;
 int G_GetLocalPlayers(int out[MAXPLAYERS]);
 
+// Splitscreen: every view's camera, so one shared shadow map covers lights near any player.
+static DVector3 gSplitCullPos[MAXPLAYERS];
+static int gSplitCullCount = 0;
+
 void CollectLights(FLevelLocals* Level, const DVector3& viewpos)
 {
 	IShadowMap* sm = &screen->mShadowMap;
@@ -73,7 +78,10 @@ void CollectLights(FLevelLocals* Level, const DVector3& viewpos)
 	for (auto light = Level->lights; light; light = light->next)
 	{
 		IShadowMap::LightsProcessed++;
-		if (light->shadowmapped && light->IsActive() && lightindex < 1024 && !hw_LightShadowCulled(light, viewpos))
+		if (light->shadowmapped && light->IsActive() && lightindex < 1024 && [&] {
+			if (gSplitCullCount == 0) return !hw_LightShadowCulled(light, viewpos);
+			for (int i = 0; i < gSplitCullCount; i++) if (!hw_LightShadowCulled(light, gSplitCullPos[i])) return true;
+			return false; }())
 		{
 			IShadowMap::LightsShadowmapped++;
 
@@ -109,7 +117,9 @@ sector_t* RenderViewpoint(FRenderViewpoint& mainvp, AActor* camera, IntRect* bou
 	if (mainview)
 		hw_LightCullViewPos = mainvp.Pos;
 
-	if (mainview && toscreen && !(camera->Level->flags3 & LEVEL3_NOSHADOWMAP) && camera->Level->HasDynamicLights && gl_light_shadowmap && screen->allowSSBO() && (screen->hwcaps & RFL_SHADER_STORAGE_BUFFER))
+	// Splitscreen views share the shadow map built for the first view (it covers every camera).
+	if (gSplitView.active && gSplitView.index > 0) {}
+	else if (mainview && toscreen && !(camera->Level->flags3 & LEVEL3_NOSHADOWMAP) && camera->Level->HasDynamicLights && gl_light_shadowmap && screen->allowSSBO() && (screen->hwcaps & RFL_SHADER_STORAGE_BUFFER))
 	{
 		screen->SetAABBTree(camera->Level->aabbTree);
 		const DVector3 viewpos = mainvp.Pos;
@@ -379,6 +389,9 @@ static sector_t* RenderSplitViews(const int* locals, int count)
 	sector_t* result = nullptr;
 	gSplitFrame.count = 0;
 	hw_SplitscreenActive = true;
+	gSplitCullCount = 0;
+	for (int v = 0; v < count && v < SPLITSCREEN_MAXVIEWS; v++)
+		if (players[locals[v]].camera) gSplitCullPos[gSplitCullCount++] = players[locals[v]].camera->Pos();
 
 	for (int v = 0; v < count && v < SPLITSCREEN_MAXVIEWS; v++)
 	{
@@ -415,10 +428,13 @@ static sector_t* RenderSplitViews(const int* locals, int count)
 	}
 
 	gSplitView.active = false;
+	gSplitCullCount = 0;
 	viewwidth = saved_w; viewheight = saved_h; viewwindowx = saved_x; viewwindowy = saved_y;
 	r_viewwindow.WidescreenRatio = saved_ratio;
 	return result;
 }
+
+
 
 sector_t* RenderView(player_t* player)
 {

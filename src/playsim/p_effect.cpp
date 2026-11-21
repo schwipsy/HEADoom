@@ -64,6 +64,11 @@ FCRandom pr_railtrail("RailTrail");
 // Particles spawned farther than this from every player's view are not created (0 = off).
 // Purely visual: particles use no game RNG, so skipping them cannot desync.
 CVAR(Float, r_particlelod, 2048.f, CVAR_ARCHIVE)
+CVAR(Bool, r_particleviewcull, true, CVAR_ARCHIVE)
+// Lifetime multiplier while particle thinning is on (r_particlethin): fewer particles alive at once
+CVAR(Float, r_particlelifescale, 0.6f, CVAR_ARCHIVE)
+EXTERN_CVAR(Int, r_particlethin)
+extern bool hw_SplitscreenActive;
 
 #define FADEFROMTTL(a)	(1.f/(a))
 
@@ -357,16 +362,28 @@ void P_ThinkParticles (FLevelLocals *Level)
 void P_SpawnParticle(FLevelLocals *Level, const DVector3 &pos, const DVector3 &vel, const DVector3 &accel, PalEntry color, double startalpha, int lifetime, double size,
 	double fadestep, double sizestep, int flags, FTextureID texture, ERenderStyle style, double startroll, double rollvel, double rollacc, double fadeoutstep)
 {
-	if (r_particlelod > 0)
+	// Skip particles too far from every player's camera, or (r_particleviewcull) behind all of them.
+	// Uses every player's camera, not only local ones, so all clients make the same choice.
+	const bool viewcull = r_particleviewcull && !(flags & SPF_ALWAYSSPAWN);
+	if (r_particlelod > 0 || viewcull)
 	{
-		const double maxd2 = double(r_particlelod) * r_particlelod;
+		const double maxd2 = r_particlelod > 0 ? double(r_particlelod) * r_particlelod : 1e30;
+		constexpr double neard2 = 384. * 384.;	// always spawn this close: it can drift into view
+		const double cosHalf = 0.2588;	// cos(75): 150-degree cone, wider than any normal FOV
 		sector_t *sec = Level->PointInSector(pos.XY());
 		bool seen = false;
 		for (int i = 0; i < MAXPLAYERS && !seen; i++)
 		{
 			if (!Level->PlayerInGame(i)) continue;
 			AActor *cam = Level->Players[i]->camera ? Level->Players[i]->camera : Level->Players[i]->mo;
-			if (cam && (cam->PosRelative(sec) - pos).LengthSquared() < maxd2) seen = true;
+			if (!cam) continue;
+			const DVector3 d = pos - cam->PosRelative(sec);
+			const double d2 = d.LengthSquared();
+			if (d2 >= maxd2) continue;
+			if (!viewcull || d2 < neard2) { seen = true; continue; }
+			const DVector2 fwd = cam->Angles.Yaw.ToVector();
+			const double len = d.XY().Length();
+			seen = len <= 0 || (fwd | d.XY()) >= cosHalf * len;
 		}
 		if (!seen) return;
 	}
@@ -375,6 +392,8 @@ void P_SpawnParticle(FLevelLocals *Level, const DVector3 &pos, const DVector3 &v
 
 	if (particle)
 	{
+		if (r_particlethin >= 2 || (r_particlethin == 1 && hw_SplitscreenActive))
+			lifetime = max(1, int(lifetime * clamp<float>(r_particlelifescale, 0.1f, 1.f)));
 		particle->Pos = pos;
 		particle->Vel = FVector3(vel);
 		particle->Acc = FVector3(accel);

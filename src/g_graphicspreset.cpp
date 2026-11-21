@@ -232,6 +232,17 @@ static const FPresetSetting PresetSettings[] =
 	// Decals and particles
 	{ "cl_maxdecals",					{ "1000", "2500", "5000", "7500", "10000" } },
 	{ "r_maxparticles",					{ "1250", "2500", "5000", "7500", "10000" } },
+	{ "hc_smokelimit",					{ "5", "10", "15", "20", "25" } },
+	{ "hc_maxsmoke",					{ "15", "25", "40", "60", "80" } },
+	{ "hc_maxsmokepuffs",				{ "30", "60", "150", "250", "400" } },
+	{ "hc_smokedist",					{ "800", "1000", "1500", "2000", "3000" } },
+	{ "hc_ambientsmoke",				{ "0", "0", "1", "1", "2" } },
+	{ "hc_maxcasings",					{ "30", "60", "100", "200", "400" } },
+	{ "hc_maxdebris",					{ "100", "200", "350", "500", "800" } },
+	{ "hc_maxpaper",					{ "50", "100", "150", "250", "400" } },
+	{ "hc_debrisdist",					{ "800", "1000", "1500", "2000", "3000" } },
+	{ "hc_fxinteract",					{ "0", "0", "1", "1", "1" } },	// Low: nothing pushable, smoke stays particles
+	{ "r_particlethin",					{ "2", "2", "1", "1", "1" } },
 
 	// Destruction effect quality
 	{ "dissolve_canvas_quality",		{ "10", "10", "20", "20", "20" } },

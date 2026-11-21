@@ -817,6 +817,7 @@ class Actor : Thinker native
 	}
 	native void SetShade(color col);
 	native clearscope int GetRenderStyle() const;
+	native clearscope TextureID GetModelSkin() const;
 	native clearscope bool CheckKeys(int locknum, bool remote, bool quiet = false);
 	protected native void CheckPortalTransition(bool linked = true);
 	native clearscope bool HasConversation() const;
